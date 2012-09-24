@@ -12,6 +12,7 @@
 		<module>cordova</module>
 		<module>jfeed</module>
 		<module>mootools</module>
+        <module>enyo</module>
 	</modules>
 	
 	<build>
