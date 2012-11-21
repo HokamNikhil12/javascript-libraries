@@ -9,7 +9,7 @@
 
     <groupId>org.nano.libs</groupId>
     <artifactId>jquery</artifactId>
-    <version>1.8.0</version>
+    <version>1.8.3</version>
     <packaging>pom</packaging>
     <name>jquery</name>
     
