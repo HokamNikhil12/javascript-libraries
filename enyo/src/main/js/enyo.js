@@ -16,7 +16,7 @@ node: r
 var t = enyo.locateScript(e);
 if (t) {
 enyo.args.root = (enyo.args.root || t.path).replace("/source", "");
-for (var n = 0, r; r = t.node.attributes.item(n); n++) enyo.args[r.nodeName] = r.value;
+for (var i=0, al = t.node.attributes.length, it; (i < al) && (it = t.node.attributes.item(i)); i++) enyo.args[r.nodeName] = r.value;
 }
 })();
 
