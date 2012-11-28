@@ -16,7 +16,7 @@ node: r
 var t = enyo.locateScript(e);
 if (t) {
 enyo.args.root = (enyo.args.root || t.path).replace("/source", "");
-for (var i=0, al = t.node.attributes.length, it; (i < al) && (it = t.node.attributes.item(i)); i++) enyo.args[r.nodeName] = r.value;
+for (var n = 0, r = t.node.attributes.length, i; n < r && (i = t.node.attributes.item(n)); n++) enyo.args[i.nodeName] = i.value;
 }
 })();
 
@@ -950,7 +950,7 @@ request: function(e) {
 var t = this.getXMLHttpRequest(e), n = e.method || "GET", r = !e.sync;
 e.username ? t.open(n, enyo.path.rewrite(e.url), r, e.username, e.password) : t.open(n, enyo.path.rewrite(e.url), r), enyo.mixin(t, e.xhrFields), e.callback && this.makeReadyStateHandler(t, e.callback);
 if (e.headers && t.setRequestHeader) for (var i in e.headers) t.setRequestHeader(i, e.headers[i]);
-return typeof t.overrideMimeType == "function" && e.mimeType && t.overrideMimeType(e.mimeType), t.send(e.body || null), !r && e.callback && t.onreadystatechange(t), t;
+return n !== "GET" && t.setRequestHeader("cache-control", "no-cache"), typeof t.overrideMimeType == "function" && e.mimeType && t.overrideMimeType(e.mimeType), t.send(e.body || null), !r && e.callback && t.onreadystatechange(t), t;
 },
 cancel: function(e) {
 e.onload && (e.onload = null), e.onreadystatechange && (e.onreadystatechange = null), e.abort && e.abort();
@@ -1013,8 +1013,8 @@ go: function(e) {
 return this.startTimer(), this.request(e), this;
 },
 request: function(e) {
-var t = this.url.split("?"), n = t.shift() || "", r = t.length ? t.join("?").split("&") : [], i = enyo.isString(e) ? e : enyo.Ajax.objectToQuery(e);
-this.method == "GET" && (i && (r.push(i), i = null), this.cacheBust && !/^file:/i.test(n) && r.push(Math.random()));
+var t = this.url.split("?"), n = t.shift() || "", r = t.length ? t.join("?").split("&") : [], i = null;
+enyo.isString(e) ? i = e : e && r.push(enyo.Ajax.objectToQuery(e)), this.method == "GET" && (i && (r.push(i), i = null), this.cacheBust && !/^file:/i.test(n) && r.push(Math.random()));
 var s = r.length ? [ n, r.join("&") ].join("?") : n, o = {};
 i = this.postBody || i, this.method != "GET" && (this.method === "POST" && window.FormData && i instanceof FormData || (o["Content-Type"] = this.contentType)), enyo.mixin(o, this.headers), enyo.keys(o).length === 0 && (o = undefined);
 try {
@@ -1090,7 +1090,7 @@ e.getAllResponseHeaders && (n = e.getAllResponseHeaders().split(/\r?\n/));
 for (var r = 0; r < n.length; r++) {
 var i = n[r], s = i.indexOf(": ");
 if (s > 0) {
-var o = i.substring(0, s), u = i.substring(s + 2);
+var o = i.substring(0, s).toLowerCase(), u = i.substring(s + 2);
 t[o] = u;
 }
 }
@@ -1433,7 +1433,7 @@ setupBodyFitting: function() {
 enyo.dom.applyBodyFit(), this.addClass("enyo-fit enyo-clip");
 },
 setupOverflowScrolling: function() {
-if (enyo.platform.android || enyo.platform.androidChrome) return;
+if (enyo.platform.android || enyo.platform.androidChrome || enyo.platform.blackberry) return;
 document.getElementsByTagName("body")[0].className += " webkitOverflowScrolling";
 },
 render: function() {
@@ -1667,11 +1667,17 @@ regex: /Android (\d+)/
 }, {
 platform: "android",
 regex: /Silk\/1./,
-forceVersion: 2
+forceVersion: 2,
+extra: {
+silk: 1
+}
 }, {
 platform: "android",
 regex: /Silk\/2./,
-forceVersion: 4
+forceVersion: 4,
+extra: {
+silk: 2
+}
 }, {
 platform: "ie",
 regex: /MSIE (\d+)/
@@ -1693,11 +1699,14 @@ regex: /Android;.*Firefox\/(\d+)/
 }, {
 platform: "firefox",
 regex: /Firefox\/(\d+)/
+}, {
+platform: "blackberry",
+regex: /BB1\d;.*Version\/(\d+\.\d+)/
 } ];
 for (var r = 0, i, s, o; i = n[r]; r++) {
 s = i.regex.exec(e);
 if (s) {
-i.forceVersion ? o = i.forceVersion : o = Number(s[1]), t[i.platform] = o;
+i.forceVersion ? o = i.forceVersion : o = Number(s[1]), t[i.platform] = o, i.extra && enyo.mixin(t, i.extra);
 break;
 }
 }
@@ -2177,7 +2186,7 @@ return r;
 connect: function() {
 enyo.forEach([ "ontouchstart", "ontouchmove", "ontouchend", "ongesturestart", "ongesturechange", "ongestureend" ], function(e) {
 document[e] = enyo.dispatch;
-}), enyo.platform.androidChrome <= 18 ? this.findTarget = function(e) {
+}), enyo.platform.androidChrome <= 18 || enyo.platform.silk === 2 ? this.findTarget = function(e) {
 return document.elementFromPoint(e.screenX, e.screenY);
 } : document.elementFromPoint || (this.findTarget = function(e) {
 return this.findTargetTraverse(null, e.clientX, e.clientY);
@@ -3005,6 +3014,9 @@ os: "ios",
 version: 5
 }, {
 os: "webos",
+version: 1e9
+}, {
+os: "blackberry",
 version: 1e9
 } ],
 hasTouchScrolling: function() {
@@ -4654,7 +4666,7 @@ this.inherited(arguments), enyo.g11n && (this.locale = enyo.g11n.currentLocale()
 },
 initDefaults: function() {
 var e = "AM", t = "PM";
-this.is24HrMode = !1, enyo.g11n && (this._tf = new enyo.g11n.Fmts({
+this.is24HrMode == null && (this.is24HrMode = !1), enyo.g11n && (this._tf = new enyo.g11n.Fmts({
 locale: this.locale
 }), e = this._tf.getAmCaption(), t = this._tf.getPmCaption(), this.is24HrMode == null && (this.is24HrMode = !this._tf.isAmPm())), this.setupPickers(this._tf ? this._tf.getTimeFieldOrder() : "hma");
 var n = this.value = this.value || new Date, r;
@@ -6396,7 +6408,7 @@ return this.controlsIndex = t, i;
 statics: {
 positionControl: function(e, t, n) {
 var r = n || "px";
-if (!this.updating) if (enyo.dom.canTransform() && !enyo.platform.android) {
+if (!this.updating) if (enyo.dom.canTransform() && !enyo.platform.android && enyo.platform.ie !== 10) {
 var i = t.left, s = t.top;
 i = enyo.isString(i) ? i : i && i + r, s = enyo.isString(s) ? s : s && s + r, enyo.dom.transform(e, {
 translateX: i || null,
