@@ -7,9 +7,9 @@
         <version>3.0.2</version>
     </parent>
 
-    <artifactId>cryptoJS-aes</artifactId>
+    <artifactId>cryptoJS-enc-base64</artifactId>
     <packaging>pom</packaging>
-    <name>cryptoJs-aes</name>
+    <name>cryptoJs-enc-base64</name>
     
     <distributionManagement>
     	<!-- We deploy on the 3rd party repository -->
@@ -44,19 +44,14 @@
 				<configuration>
 					<artifacts>
 						<artifact>
-		                  <file>${project.basedir}/../..//src/main/js/aes.js</file>
+		                  <file>${project.basedir}/../..//src/main/js/enc-base64.js</file>
                 		  <type>js</type>
 		                </artifact>
 		                <artifact>
-		                  <file>${project.basedir}/../../src/main/js/aes-min.js</file>
+		                  <file>${project.basedir}/../../src/main/js/enc-base64-min.js</file>
                 		  <type>js</type>
         		          <classifier>min</classifier>
 		                </artifact>
-                        <artifact>
-                          <file>${project.basedir}/../../src/main/js/rollups/aes.js</file>
-                          <type>js</type>
-                          <classifier>rollups</classifier>
-                        </artifact>
 		            </artifacts>    
 				</configuration>
 			  </execution>

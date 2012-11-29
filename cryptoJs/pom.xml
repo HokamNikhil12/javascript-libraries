@@ -33,7 +33,7 @@
 	<modules>
         <module>modules/core</module>
         <module>modules/aes</module>
-        <module>modules/cypher-core</module>
+        <module>modules/cipher-core</module>
         <module>modules/evpkdf</module>
         <module>modules/hmac</module>
         <module>modules/md5</module>
@@ -42,5 +42,6 @@
         <module>modules/sha-256</module>
         <module>modules/sha-384</module>
         <module>modules/sha-512</module>
+        <module>modules/base64</module>
     </modules>        
 </project>
