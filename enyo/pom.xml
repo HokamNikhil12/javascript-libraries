@@ -8,10 +8,10 @@
     </parent>
 
     <groupId>org.nano.libs</groupId>
-    <artifactId>cordova</artifactId>
-    <version>2.2.0</version>
+    <artifactId>enyo</artifactId>
+    <version>2.1.1</version>
     <packaging>pom</packaging>
-    <name>cordova</name>
+    <name>enyo</name>
     
     <distributionManagement>
     	<!-- We deploy on the 3rd party repository -->
@@ -46,24 +46,15 @@
 				<configuration>
 					
 					<artifacts>
-
 						<!-- Android -->
 						<artifact>
-		                  <file>${project.basedir}/src/main/js/android/${artifactId}-${project.version}.js</file>
+		                  <file>${project.basedir}/src/main/js/enyo.js</file>
                 		  <type>js</type>
-                		  <classifier>android</classifier>
-		                </artifact>
-		                <artifact>
-		                  <file>${project.basedir}/src/main/js/android/${artifactId}-${project.version}.jar</file>
-                		  <type>jar</type>
-                		  <classifier>android</classifier>
 		                </artifact>
 
-		                <!-- iOS -->
 		                <artifact>
-		                  <file>${project.basedir}/src/main/js/ios/${artifactId}-${project.version}.js</file>
-                		  <type>js</type>
-        		          <classifier>ios</classifier>
+		                  <file>${project.basedir}/src/main/css/enyo.css</file>
+                		  <type>css</type>
 		                </artifact>
 		                
 		            </artifacts>    
