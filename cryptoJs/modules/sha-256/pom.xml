@@ -5,6 +5,7 @@
         <groupId>org.nanoko.libs</groupId>
         <artifactId>cryptoJS</artifactId>
         <version>3.0.2</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>cryptoJS-sha256</artifactId>
