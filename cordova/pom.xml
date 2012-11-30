@@ -7,7 +7,7 @@
         <version>5</version>
     </parent>
 
-    <groupId>org.nano.libs</groupId>
+    <groupId>org.nanoko.libs</groupId>
     <artifactId>cordova</artifactId>
     <version>2.2.0</version>
     <packaging>pom</packaging>
