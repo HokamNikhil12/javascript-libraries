@@ -13,6 +13,7 @@
 		<module>jfeed</module>
 		<module>mootools</module>
         <module>enyo</module>
+        <module>cryptoJs</module>
 	</modules>
 	
 	<build>
