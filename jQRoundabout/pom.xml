@@ -1,0 +1,51 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.sonatype.oss</groupId>
+        <artifactId>oss-parent</artifactId>
+        <version>5</version>
+    </parent>
+
+    <groupId>org.nanoko.libs</groupId>
+    <artifactId>jqroundabout</artifactId>
+    <version>2.4.2</version>
+    <packaging>js</packaging>
+    <name>jQRoundabout</name>
+    
+    <distributionManagement>
+    	<!-- We deploy on the 3rd party repository -->
+        <repository>
+            <id>${repo.thirdparty.id}</id>
+            <name>${repo.thirdparty.name}</name>
+            <url>${repo.thirdparty.url}</url>
+            <uniqueVersion>false</uniqueVersion>
+        </repository>
+
+        <snapshotRepository>
+            <id>${repo.snapshots.id}</id>
+            <name>${repo.snapshots.name}</name>
+            <url>${repo.snapshots.url}</url>
+            <uniqueVersion>false</uniqueVersion>
+        </snapshotRepository>
+    </distributionManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.nanoko.libs</groupId>
+            <artifactId>jquery</artifactId>
+            <version>1.8.3</version>
+            <type>js</type>
+        </dependency>
+    </dependencies>
+
+	<build>
+		<plugins>
+            <plugin>
+                <groupId>org.nanoko.coffee-mill</groupId>
+                <artifactId>coffee-mill-maven-plugin</artifactId>
+                <extensions>true</extensions>
+            </plugin>
+		</plugins>
+	  </build>
+</project>
