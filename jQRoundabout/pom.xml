@@ -45,6 +45,14 @@
                 <groupId>org.nanoko.coffee-mill</groupId>
                 <artifactId>coffee-mill-maven-plugin</artifactId>
                 <extensions>true</extensions>
+                <configuration>
+                    <javascriptAggregation>
+                        <file>jquery.roundabout.js</file>
+                        <file>jquery.roundabout-shapes.js</file>
+                        <file>jquery.event.drag-2.2.js</file>
+                        <file>jquery.event.drop-2.2.js</file>
+                    </javascriptAggregation>
+                </configuration>
             </plugin>
 		</plugins>
 	  </build>
