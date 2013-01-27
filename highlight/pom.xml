@@ -1,0 +1,209 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.sonatype.oss</groupId>
+        <artifactId>oss-parent</artifactId>
+        <version>5</version>
+    </parent>
+
+    <groupId>org.nanoko.libs</groupId>
+    <artifactId>highlight</artifactId>
+    <version>7.3</version>
+    <packaging>pom</packaging>
+    <name>highlight</name>
+
+    <distributionManagement>
+        <!-- We deploy on the 3rd party repository -->
+        <repository>
+            <id>${repo.thirdparty.id}</id>
+            <name>${repo.thirdparty.name}</name>
+            <url>${repo.thirdparty.url}</url>
+            <uniqueVersion>false</uniqueVersion>
+        </repository>
+
+        <snapshotRepository>
+            <id>${repo.snapshots.id}</id>
+            <name>${repo.snapshots.name}</name>
+            <url>${repo.snapshots.url}</url>
+            <uniqueVersion>false</uniqueVersion>
+        </snapshotRepository>
+    </distributionManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>1.7</version>
+                <executions>
+                    <execution>
+                        <id>attach</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>attach-artifact</goal>
+                        </goals>
+                        <configuration>
+
+                            <artifacts>
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/highlight.pack.js</file>
+                                    <type>js</type>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/dark.css</file>
+                                    <type>css</type>
+                                    <classifier>dark</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/default.css</file>
+                                    <type>css</type>
+                                    <classifier>default</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/far.css</file>
+                                    <type>css</type>
+                                    <classifier>far</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/github.css</file>
+                                    <type>css</type>
+                                    <classifier>github</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/googlecode.css</file>
+                                    <type>css</type>
+                                    <classifier>googlecode</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/idea.css</file>
+                                    <type>css</type>
+                                    <classifier>idea</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/ir_black.css</file>
+                                    <type>css</type>
+                                    <classifier>ir_black</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/magula.css</file>
+                                    <type>css</type>
+                                    <classifier>magula</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/monokai.css</file>
+                                    <type>css</type>
+                                    <classifier>monokai</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/monokai-sublime.css</file>
+                                    <type>css</type>
+                                    <classifier>monokai-sublime</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/out.jpeg</file>
+                                    <type>jpeg</type>
+                                    <classifier>out</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/railcasts.css</file>
+                                    <type>css</type>
+                                    <classifier>railcasts</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/rainbow.css</file>
+                                    <type>css</type>
+                                    <classifier>rainbow</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/solarize_dark.css</file>
+                                    <type>css</type>
+                                    <classifier>solarized_dark</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/solarized_light.css</file>
+                                    <type>css</type>
+                                    <classifier>solarized_light</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/sunburst.css</file>
+                                    <type>css</type>
+                                    <classifier>sunburst</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/tomorrow-night-blue.css</file>
+                                    <type>css</type>
+                                    <classifier>tomorrow-light-blue</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/tomorrow-night-bright.css</file>
+                                    <type>css</type>
+                                    <classifier>tomorrow-night-bright</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/tomorrow-night-eighties.css</file>
+                                    <type>css</type>
+                                    <classifier>tomorrow-night-eighties</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/tomorrow-night.css</file>
+                                    <type>css</type>
+                                    <classifier>tomorrow-night</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/tomorrow.css</file>
+                                    <type>css</type>
+                                    <classifier>tomorrow</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/vs.css</file>
+                                    <type>css</type>
+                                    <classifier>vs</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/xcode.css</file>
+                                    <type>css</type>
+                                    <classifier>xcode</classifier>
+                                </artifact>
+
+                                <artifact>
+                                    <file>${project.basedir}/src/main/js/styles/zenburn.css</file>
+                                    <type>css</type>
+                                    <classifier>zenburn</classifier>
+                                </artifact>
+
+
+
+
+
+                            </artifacts>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
