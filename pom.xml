@@ -15,6 +15,9 @@
         <module>enyo</module>
         <module>cryptoJs</module>
         <module>bootstrap</module>
+        <module>marked</module>
+        <module>showdown</module>
+        <module>highlight</module>
 	</modules>
 	
 	<build>
