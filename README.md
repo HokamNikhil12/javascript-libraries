@@ -1,7 +1,7 @@
 javascript-libraries
 ====================
 
-Maven project installing inside the Maven repository famous/commons/usual JavaScript libraries.
+Maven project installing inside the Maven repository JavaScript libraries.
 
 Compilation
 -----------
