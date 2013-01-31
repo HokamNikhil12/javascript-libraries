@@ -106,7 +106,7 @@
                                 </artifact>
 
                                 <artifact>
-                                    <file>${project.basedir}/src/main/js/styles/monokai-sublime.css</file>
+                                    <file>${project.basedir}/src/main/js/styles/monokai_sublime.css</file>
                                     <type>css</type>
                                     <classifier>monokai-sublime</classifier>
                                 </artifact>
@@ -118,7 +118,7 @@
                                 </artifact>
 
                                 <artifact>
-                                    <file>${project.basedir}/src/main/js/styles/railcasts.css</file>
+                                    <file>${project.basedir}/src/main/js/styles/railscasts.css</file>
                                     <type>css</type>
                                     <classifier>railcasts</classifier>
                                 </artifact>
@@ -130,7 +130,7 @@
                                 </artifact>
 
                                 <artifact>
-                                    <file>${project.basedir}/src/main/js/styles/solarize_dark.css</file>
+                                    <file>${project.basedir}/src/main/js/styles/solarized_dark.css</file>
                                     <type>css</type>
                                     <classifier>solarized_dark</classifier>
                                 </artifact>
