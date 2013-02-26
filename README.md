@@ -1,4 +1,9 @@
 javascript-libraries
 ====================
 
-Maven project installing within a Maven repository famous/commons JavaScript libraries
+Maven project installing inside the Maven repository JavaScript libraries.
+
+Compilation
+-----------
+
+    mvn clean install

@@ -9,7 +9,7 @@
 
     <groupId>org.nanoko.libs</groupId>
     <artifactId>bootstrap</artifactId>
-    <version>2.2.2</version>
+    <version>2.3.0</version>
     <packaging>pom</packaging>
     <name>bootstrap</name>
 
@@ -73,7 +73,6 @@
                                     <type>png</type>
                                     <classifier>glyphicons-halflings-white</classifier>
                                 </artifact>
-
                             </artifacts>
                         </configuration>
                     </execution>
