@@ -23,8 +23,9 @@ for (var n = 0, r = t.node.attributes.length, i; n < r && (i = t.node.attributes
 // ../../loader.js
 
 (function() {
-enyo = window.enyo || {}, enyo.path = {
-paths: {},
+enyo = window.enyo || {}, enyo.pathResolverFactory = function() {
+this.paths = {};
+}, enyo.pathResolverFactory.prototype = {
 addPath: function(e, t) {
 return this.paths[e] = t;
 },
@@ -42,15 +43,12 @@ return t = !0, n(r[i]) || "";
 do t = !1, s = s.replace(this.rewritePattern, i); while (t);
 return s;
 }
-}, enyo.loaderFactory = function(e) {
-this.machine = e, this.packages = [], this.modules = [], this.sheets = [], this.stack = [];
+}, enyo.path = new enyo.pathResolverFactory, enyo.loaderFactory = function(e, t) {
+this.machine = e, this.packages = [], this.modules = [], this.sheets = [], this.designs = [], this.stack = [], this.pathResolver = t || enyo.path, this.packageName = "", this.packageFolder = "", this.finishCallbacks = {};
 }, enyo.loaderFactory.prototype = {
-packageName: "",
-packageFolder: "",
 verbose: !1,
-finishCallbacks: {},
-loadScript: function(e) {
-this.machine.script(e);
+loadScript: function(e, t, n) {
+this.machine.script(e, t, n);
 },
 loadSheet: function(e) {
 this.machine.sheet(e);
@@ -68,57 +66,73 @@ depends: arguments || []
 more: function(e) {
 if (e && this.continueBlock(e)) return;
 var t = this.stack.pop();
-t ? (this.verbose && console.groupEnd("* finish package (" + (t.packageName || "anon") + ")"), this.packageFolder = t.folder, this.packageName = "", this.more(t)) : this.finish();
+t ? (enyo.runtimeLoading && e.failed && (t.failed = t.failed || [], t.failed.push.apply(t.failed, e.failed)), this.verbose && console.groupEnd("* finish package (" + (t.packageName || "anon") + ")"), this.packageFolder = t.folder, this.packageName = "", this.more(t)) : this.finish(e);
 },
-finish: function() {
+finish: function(e) {
 this.packageFolder = "", this.verbose && console.log("-------------- fini");
-for (var e in this.finishCallbacks) this.finishCallbacks[e] && (this.finishCallbacks[e](), this.finishCallbacks[e] = null);
+for (var t in this.finishCallbacks) this.finishCallbacks[t] && (this.finishCallbacks[t](e), this.finishCallbacks[t] = null);
 },
 continueBlock: function(e) {
 while (e.index < e.depends.length) {
 var t = e.depends[e.index++];
 if (t) if (typeof t == "string") {
 if (this.require(t, e)) return !0;
-} else enyo.path.addPaths(t);
+} else this.pathResolver.addPaths(t);
 }
 },
 require: function(e, t) {
-var n = enyo.path.rewrite(e), r = this.getPathPrefix(e);
+var n = this.pathResolver.rewrite(e), r = this.getPathPrefix(e);
 n = r + n;
 if (n.slice(-4) == ".css" || n.slice(-5) == ".less") this.verbose && console.log("+ stylesheet: [" + r + "][" + e + "]"), this.requireStylesheet(n); else {
-if (n.slice(-3) != ".js" || n.slice(-10) == "package.js") return this.requirePackage(n, t), !0;
-this.verbose && console.log("+ module: [" + r + "][" + e + "]"), this.requireScript(e, n);
+if (n.slice(-3) == ".js" && n.slice(-10) != "package.js") return this.verbose && console.log("+ module: [" + r + "][" + e + "]"), this.requireScript(e, n, t);
+if (n.slice(-7) != ".design") return this.requirePackage(n, t), !0;
+this.verbose && console.log("+ design metadata: [" + r + "][" + e + "]"), this.requireDesign(n);
 }
 },
 getPathPrefix: function(e) {
 var t = e.slice(0, 1);
-return t != "/" && t != "\\" && t != "$" && e.slice(0, 5) != "http:" ? this.packageFolder : "";
+return t != "/" && t != "\\" && t != "$" && !/^https?:/i.test(e) ? this.packageFolder : "";
 },
 requireStylesheet: function(e) {
 this.sheets.push(e), this.loadSheet(e);
 },
-requireScript: function(e, t) {
+requireScript: function(e, t, n) {
 this.modules.push({
 packageName: this.packageName,
 rawPath: e,
 path: t
-}), this.loadScript(t);
+});
+if (enyo.runtimeLoading) {
+var r = this, i = function() {
+r.more(n);
+}, s = function() {
+n.failed = n.failed || [], n.failed.push(t), r.more(n);
+};
+this.loadScript(t, i, s);
+} else this.loadScript(t);
+return enyo.runtimeLoading;
+},
+requireDesign: function(e) {
+this.designs.push({
+packageName: this.packageName,
+path: e
+});
 },
 decodePackagePath: function(e) {
-var t = "", n = "", r = "", i = "package.js", s = e.replace(/\\/g, "/").replace(/\/\//g, "/").replace(/:\//, "://").split("/");
+var t = "", n = "", r = "", i = "package.js", s = e.replace(/\\/g, "/").replace(/\/\//g, "/").replace(/:\//, "://").split("/"), o, u;
 if (s.length) {
-var o = s.pop() || s.pop() || "";
-o.slice(-i.length) !== i ? s.push(o) : i = o, r = s.join("/"), r = r ? r + "/" : "", i = r + i;
-for (var u = s.length - 1; u >= 0; u--) if (s[u] == "source") {
-s.splice(u, 1);
+var a = s.pop() || s.pop() || "";
+a.slice(-i.length) !== i ? s.push(a) : i = a, r = s.join("/"), r = r ? r + "/" : "", i = r + i;
+for (o = s.length - 1; o >= 0; o--) if (s[o] == "source") {
+s.splice(o, 1);
 break;
 }
 n = s.join("/");
-for (var u = s.length - 1, a; a = s[u]; u--) if (a == "lib" || a == "enyo") {
-s = s.slice(u + 1);
+for (o = s.length - 1; u = s[o]; o--) if (u == "lib" || u == "enyo") {
+s = s.slice(o + 1);
 break;
 }
-for (var u = s.length - 1, a; a = s[u]; u--) (a == ".." || a == ".") && s.splice(u, 1);
+for (o = s.length - 1; u = s[o]; o--) (u == ".." || u == ".") && s.splice(o, 1);
 t = s.join("-");
 }
 return {
@@ -130,7 +144,7 @@ manifest: i
 },
 aliasPackage: function(e) {
 var t = this.decodePackagePath(e);
-this.manifest = t.manifest, t.alias && (enyo.path.addPath(t.alias, t.target), this.packageName = t.alias, this.packages.push({
+this.manifest = t.manifest, t.alias && (this.pathResolver.addPath(t.alias, t.target), this.packageName = t.alias, this.packages.push({
 name: t.alias,
 folder: t.folder
 })), this.packageFolder = t.folder;
@@ -143,23 +157,27 @@ t.folder = this.packageFolder, this.aliasPackage(e), t.packageName = this.packag
 
 // boot.js
 
-enyo.machine = {
+enyo.execUnsafeLocalFunction = function(e) {
+typeof MSApp == "undefined" ? e() : MSApp.execUnsafeLocalFunction(e);
+}, enyo.machine = {
 sheet: function(e) {
 var t = "text/css", n = "stylesheet", r = e.slice(-5) == ".less";
 r && (window.less ? (t = "text/less", n = "stylesheet/less") : e = e.slice(0, e.length - 4) + "css");
 var i;
-enyo.runtimeLoading || r ? (i = document.createElement("link"), i.href = e, i.media = "screen", i.rel = n, i.type = t, document.getElementsByTagName("head")[0].appendChild(i)) : document.write('<link href="' + e + '" media="screen" rel="' + n + '" type="' + t + '" />'), r && window.less && (less.sheets.push(i), enyo.loader.finishCallbacks.lessRefresh || (enyo.loader.finishCallbacks.lessRefresh = function() {
+enyo.runtimeLoading || r ? (i = document.createElement("link"), i.href = e, i.media = "screen", i.rel = n, i.type = t, document.getElementsByTagName("head")[0].appendChild(i)) : (i = function() {
+document.write('<link href="' + e + '" media="screen" rel="' + n + '" type="' + t + '" />');
+}, enyo.execUnsafeLocalFunction(i)), r && window.less && (less.sheets.push(i), enyo.loader.finishCallbacks.lessRefresh || (enyo.loader.finishCallbacks.lessRefresh = function() {
 less.refresh(!0);
 }));
 },
 script: function(e, t, n) {
 if (!enyo.runtimeLoading) document.write('<script src="' + e + '"' + (t ? ' onload="' + t + '"' : "") + (n ? ' onerror="' + n + '"' : "") + "></scri" + "pt>"); else {
 var r = document.createElement("script");
-r.src = e, r.onLoad = t, r.onError = n, document.getElementsByTagName("head")[0].appendChild(r);
+r.src = e, r.onload = t, r.onerror = n, document.getElementsByTagName("head")[0].appendChild(r);
 }
 },
 inject: function(e) {
-document.write('<script type="text/javascript">' + e + "</script>");
+document.write('<script type="text/javascript">' + e + "</scri" + "pt>");
 }
 }, enyo.loader = new enyo.loaderFactory(enyo.machine), enyo.depends = function() {
 var e = enyo.loader;
@@ -173,9 +191,9 @@ function n(r) {
 r && r();
 if (t.length) {
 var i = t.shift(), s = i[0], o = e.isArray(s) ? s : [ s ], u = i[1];
-e.loader.finishCallbacks.runtimeLoader = function() {
+e.loader.finishCallbacks.runtimeLoader = function(e) {
 n(function() {
-u && u(s);
+u && u(e);
 });
 }, e.loader.packageFolder = "./", e.depends.apply(this, o);
 } else e.runtimeLoading = !1, e.loader.packageFolder = "";
@@ -203,13 +221,14 @@ var t = parseInt(this.levels[e], 0);
 return t <= this.level;
 },
 _log: function(e, t) {
+if (typeof console == "undefined") return;
 var n = enyo.isArray(t) ? t : enyo.cloneArray(t);
 enyo.dumbConsole && (n = [ n.join(" ") ]);
 var r = console[e];
 r && r.apply ? r.apply(console, n) : console.log.apply ? console.log.apply(console, n) : console.log(n.join(" "));
 },
 log: function(e, t) {
-window.console && this.shouldLog(e) && this._log(e, t);
+typeof console != "undefined" && this.shouldLog(e) && this._log(e, t);
 }
 }, enyo.setLogLevel = function(e) {
 var t = parseInt(e, 0);
@@ -253,6 +272,8 @@ return e.call(t) === "[object String]";
 return e.call(t) === "[object Function]";
 }, enyo.isArray = Array.isArray || function(t) {
 return e.call(t) === "[object Array]";
+}, enyo.isTrue = function(e) {
+return e !== "false" && e !== !1 && e !== 0 && e !== null && e !== undefined;
 }, enyo.indexOf = function(e, t, n) {
 if (t.indexOf) return t.indexOf(e, n);
 if (n) {
@@ -382,11 +403,14 @@ delete e.name;
 var n = "kind" in e, r = e.kind;
 delete e.kind;
 var i = enyo.constructorForKind(r), s = i && i.prototype || null;
-if (n && r === undefined || i === undefined) throw "enyo.kind: Attempt to subclass an undefined kind. Check dependencies for [" + (t || "<unnamed>") + "].";
-var o = enyo.kind.makeCtor();
-return e.hasOwnProperty("constructor") && (e._constructor = e.constructor, delete e.constructor), enyo.setPrototype(o, s ? enyo.delegate(s) : {}), enyo.mixin(o.prototype, e), o.prototype.kindName = t, o.prototype.base = i, o.prototype.ctor = o, enyo.forEach(enyo.kind.features, function(t) {
-t(o, e);
-}), enyo.setObject(t, o), o;
+if (n && r === undefined || i === undefined) {
+var o = r === undefined ? "undefined kind" : "unknown kind (" + r + ")";
+throw "enyo.kind: Attempt to subclass an " + o + ". Check dependencies for [" + (t || "<unnamed>") + "].";
+}
+var u = enyo.kind.makeCtor();
+return e.hasOwnProperty("constructor") && (e._constructor = e.constructor, delete e.constructor), enyo.setPrototype(u, s ? enyo.delegate(s) : {}), enyo.mixin(u.prototype, e), u.prototype.kindName = t, u.prototype.base = i, u.prototype.ctor = u, enyo.forEach(enyo.kind.features, function(t) {
+t(u, e);
+}), enyo.setObject(t, u), u;
 }, enyo.singleton = function(e, t) {
 var n = e.name;
 delete e.name;
@@ -514,6 +538,7 @@ _unnamedKindNumber: 0
 },
 defaultKind: "Component",
 handlers: {},
+__jobs: {},
 toString: function() {
 return this.kindName;
 },
@@ -547,7 +572,7 @@ getInstanceOwner: function() {
 return !this.owner || this.owner.notInstanceOwner ? this : this.owner;
 },
 destroy: function() {
-this.destroyComponents(), this.setOwner(null), this.destroyed = !0;
+this.destroyComponents(), this.setOwner(null), this.stopAllJobs(), this.destroyed = !0;
 },
 destroyComponents: function() {
 enyo.forEach(this.getComponents(), function(e) {
@@ -568,7 +593,7 @@ return this._componentNameMap[t] = Number(r), e.name = n;
 },
 addComponent: function(e) {
 var t = e.getName();
-t || (t = this.nameComponent(e)), this.$[t] && this.warn('Duplicate component name "' + t + '" in owner "' + this.id + '" violates unique-name-under-owner rule, replacing existing component in the hash and continuing, but this is an error condition and should be fixed.'), this.$[t] = e;
+t || (t = this.nameComponent(e)), this.$[t] && this.warn('Duplicate component name "' + t + '" in owner "' + this.id + '" violates ' + "unique-name-under-owner rule, replacing existing component in the hash and continuing, " + "but this is an error condition and should be fixed."), this.$[t] = e;
 },
 removeComponent: function(e) {
 delete this.$[e.getName()];
@@ -623,6 +648,9 @@ if (s) return s.delegateEvent(e, t, n, r, i);
 delegateEvent: function(e, t, n, r, i) {
 return this.decorateEvent(n, r, i), e == this ? this.dispatch(t, r, i) : this.bubbleDelegation(e, t, n, r, i);
 },
+stopAllJobs: function() {
+for (var e in this.__jobs) this.stopJob(e);
+},
 dispatch: function(e, t, n) {
 var r = e && this[e];
 if (r) return r.call(this, n || this, t);
@@ -633,11 +661,19 @@ this.waterfallDown(e, t, n || this);
 },
 waterfallDown: function(e, t, n) {
 for (var r in this.$) this.$[r].waterfall(e, t, n);
+},
+startJob: function(e, t, n) {
+enyo.isString(t) && (t = this[t]), this.stopJob(e), this.__jobs[e] = setTimeout(enyo.bind(this, function() {
+this.stopJob(e), t.call(this);
+}), n);
+},
+stopJob: function(e) {
+this.__jobs[e] && (clearTimeout(this.__jobs[e]), delete this.__jobs[e]);
 }
 }), enyo.defaultCtor = enyo.Component, enyo.create = enyo.Component.create = function(e) {
 if (!e.kind && "kind" in e) throw "enyo.create: Attempt to create a null kind. Check dependencies for [" + (e.name || "") + "].";
 var t = e.kind || e.isa || enyo.defaultCtor, n = enyo.constructorForKind(t);
-return n || (console.error('no constructor found for kind "' + t + '"'), n = enyo.Component), new n(e);
+return n || (enyo.error('no constructor found for kind "' + t + '"'), n = enyo.Component), new n(e);
 }, enyo.Component.subclass = function(e, t) {
 var n = e.prototype;
 t.components && (n.kindComponents = t.components, delete n.components);
@@ -947,10 +983,10 @@ document.cookie = r;
 
 enyo.xhr = {
 request: function(e) {
-var t = this.getXMLHttpRequest(e), n = e.method || "GET", r = !e.sync;
-e.username ? t.open(n, enyo.path.rewrite(e.url), r, e.username, e.password) : t.open(n, enyo.path.rewrite(e.url), r), enyo.mixin(t, e.xhrFields), e.callback && this.makeReadyStateHandler(t, e.callback);
-if (e.headers && t.setRequestHeader) for (var i in e.headers) t.setRequestHeader(i, e.headers[i]);
-return n !== "GET" && t.setRequestHeader("cache-control", "no-cache"), typeof t.overrideMimeType == "function" && e.mimeType && t.overrideMimeType(e.mimeType), t.send(e.body || null), !r && e.callback && t.onreadystatechange(t), t;
+var t = this.getXMLHttpRequest(e), n = enyo.path.rewrite(this.simplifyFileURL(e.url)), r = e.method || "GET", i = !e.sync;
+e.username ? t.open(r, n, i, e.username, e.password) : t.open(r, n, i), enyo.mixin(t, e.xhrFields), e.callback && this.makeReadyStateHandler(t, e.callback), e.headers = e.headers || {}, r !== "GET" && enyo.platform.ios && enyo.platform.ios >= 6 && e.headers["cache-control"] !== null && (e.headers["cache-control"] = e.headers["cache-control"] || "no-cache");
+if (t.setRequestHeader) for (var s in e.headers) e.headers[s] && t.setRequestHeader(s, e.headers[s]);
+return typeof t.overrideMimeType == "function" && e.mimeType && t.overrideMimeType(e.mimeType), t.send(e.body || null), !i && e.callback && t.onreadystatechange(t), t;
 },
 cancel: function(e) {
 e.onload && (e.onload = null), e.onreadystatechange && (e.onreadystatechange = null), e.abort && e.abort();
@@ -972,6 +1008,10 @@ t.href = e;
 if (t.protocol === ":" || t.protocol === window.location.protocol && t.hostname === window.location.hostname && t.port === (window.location.port || (window.location.protocol === "https:" ? "443" : "80"))) n = !0;
 return n;
 },
+simplifyFileURL: function(e) {
+var t = document.createElement("a"), n = !1;
+return t.href = e, t.protocol === "file:" || t.protocol === ":" && window.location.protocol === "file:" ? t.protocol + "//" + t.host + t.pathname : t.protocol === ":" && window.location.protocol === "x-wmapp0:" ? window.location.protocol + "//" + window.location.pathname.split("/")[0] + "/" + t.host + t.pathname : e;
+},
 getXMLHttpRequest: function(e) {
 try {
 if (enyo.platform.ie < 10 && window.XDomainRequest && !e.headers && !this.inOrigin(e.url) && !/^file:\/\//.test(window.location.href)) return new XDomainRequest;
@@ -982,6 +1022,43 @@ return new XMLHttpRequest;
 return null;
 }
 };
+
+// formdata.js
+
+(function(e) {
+function i() {
+this.fake = !0, this._fields = [], this.boundary = "--------------------------";
+for (var e = 0; e < 24; e++) this.boundary += Math.floor(Math.random() * 10).toString(16);
+}
+function s(e, t) {
+this.name = t.name, this.type = t.type || "application/octet-stream";
+if (!enyo.isArray(e)) throw new Error("enyo.Blob only handles Arrays of Strings");
+if (e.length > 0 && typeof e[0] != "string") throw new Error("enyo.Blob only handles Arrays of Strings");
+this._bufs = e;
+}
+if (e.FormData) try {
+var t = new e.FormData, n = new e.Blob;
+enyo.FormData = e.FormData, enyo.Blob = e.Blob;
+return;
+} catch (r) {}
+i.prototype.getContentType = function() {
+return "multipart/form-data; boundary=" + this.boundary;
+}, i.prototype.append = function(e, t, n) {
+this._fields.push([ e, t, n ]);
+}, i.prototype.toString = function() {
+var e = this.boundary, t = "";
+return enyo.forEach(this._fields, function(n) {
+t += "--" + e + "\r\n";
+if (n[2] || n[1].name) {
+var r = n[1], i = n[2] || r.name;
+t += 'Content-Disposition: form-data; name="' + n[0] + '"; filename="' + i + '"\r\n', t += "Content-Type: " + r.type + "\r\n\r\n", t += r.getAsBinary() + "\r\n";
+} else t += 'Content-Disposition: form-data; name="' + n[0] + '";\r\n\r\n', t += n[1] + "\r\n";
+}), t += "--" + e + "--", t;
+}, enyo.FormData = i, s.prototype.getAsBinary = function() {
+var e = "", t = e.concat.apply(e, this._bufs);
+return t;
+}, enyo.Blob = s;
+})(window);
 
 // AjaxProperties.js
 
@@ -1014,15 +1091,15 @@ return this.startTimer(), this.request(e), this;
 },
 request: function(e) {
 var t = this.url.split("?"), n = t.shift() || "", r = t.length ? t.join("?").split("&") : [], i = null;
-enyo.isString(e) ? i = e : e && r.push(enyo.Ajax.objectToQuery(e)), this.method == "GET" && (i && (r.push(i), i = null), this.cacheBust && !/^file:/i.test(n) && r.push(Math.random()));
-var s = r.length ? [ n, r.join("&") ].join("?") : n, o = {};
-i = this.postBody || i, this.method != "GET" && (this.method === "POST" && window.FormData && i instanceof FormData || (o["Content-Type"] = this.contentType)), enyo.mixin(o, this.headers), enyo.keys(o).length === 0 && (o = undefined);
+enyo.isString(e) ? i = e : e && (i = enyo.Ajax.objectToQuery(e)), i && (r.push(i), i = null), this.cacheBust && r.push(Math.random());
+var s = r.length ? [ n, r.join("&") ].join("?") : n, o = {}, u;
+this.method != "GET" && (u = this.postBody, this.method === "POST" && u instanceof enyo.FormData ? u.fake && (o["Content-Type"] = u.getContentType(), u = u.toString()) : (o["Content-Type"] = this.contentType, u instanceof Object && (this.contentType === "application/json" ? u = JSON.stringify(u) : this.contentType === "application/x-www-form-urlencoded" ? u = enyo.Ajax.objectToQuery(u) : u = u.toString()))), enyo.mixin(o, this.headers), enyo.keys(o).length === 0 && (o = undefined);
 try {
 this.xhr = enyo.xhr.request({
 url: s,
 method: this.method,
 callback: enyo.bind(this, "receive"),
-body: i,
+body: u,
 headers: o,
 sync: window.PalmSystem ? !1 : this.sync,
 username: this.username,
@@ -1030,14 +1107,14 @@ password: this.password,
 xhrFields: this.xhrFields,
 mimeType: this.mimeType
 });
-} catch (u) {
-this.fail(u);
+} catch (a) {
+this.fail(a);
 }
 },
 receive: function(e, t) {
 if (!this.failed && !this.destroyed) {
 var n;
-typeof t.responseText == "string" && (n = t.responseText), this.xhrResponse = {
+typeof t.responseText == "string" ? n = t.responseText : n = t.responseBody, this.xhrResponse = {
 status: t.status,
 headers: enyo.Ajax.parseResponseHeaders(t),
 body: n
@@ -1172,23 +1249,23 @@ onError: ""
 constructor: function(e) {
 this.inherited(arguments);
 },
-send: function(e) {
-return this.jsonp ? this.sendJsonp(e) : this.sendAjax(e);
+send: function(e, t) {
+return this.jsonp ? this.sendJsonp(e, t) : this.sendAjax(e, t);
 },
-sendJsonp: function(e) {
-var t = new enyo.JsonpRequest;
-for (var n in {
+sendJsonp: function(e, t) {
+var n = new enyo.JsonpRequest;
+for (var r in {
 url: 1,
 callbackName: 1,
 charset: 1,
 timeout: 1
-}) t[n] = this[n];
-return this.sendAsync(t, e);
+}) n[r] = this[r];
+return enyo.mixin(n, t), this.sendAsync(n, e);
 },
-sendAjax: function(e) {
-var t = new enyo.Ajax;
-for (var n in enyo.AjaxProperties) t[n] = this[n];
-return t.timeout = this.timeout, this.sendAsync(t, e);
+sendAjax: function(e, t) {
+var n = new enyo.Ajax(t);
+for (var r in enyo.AjaxProperties) n[r] = this[r];
+return n.timeout = this.timeout, enyo.mixin(n, t), this.sendAsync(n, e);
 },
 sendAsync: function(e, t) {
 return e.go(t).response(this, "response").error(this, "error");
@@ -1218,7 +1295,19 @@ return typeof e == "string" ? (t || document).getElementById(e) : e;
 escape: function(e) {
 return e !== null ? String(e).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
 },
+getBounds: function(e) {
+return e ? {
+left: e.offsetLeft,
+top: e.offsetTop,
+width: e.offsetWidth,
+height: e.offsetHeight
+} : null;
+},
 getComputedStyle: function(e) {
+if (enyo.platform.ie < 9 && e && e.currentStyle) {
+var t = enyo.clone(e.currentStyle);
+return t.getPropertyValue = e.currentStyle.getAttribute, t.setProperty = e.currentStyle.setExpression, t.removeProperty = e.currentStyle.removeAttribute, t;
+}
 return window.getComputedStyle && e && window.getComputedStyle(e, null);
 },
 getComputedStyleValue: function(e, t, n) {
@@ -1237,6 +1326,9 @@ t && (t.className += " enyo-body-fit"), enyo.bodyIsFitting = !0;
 },
 getWindowWidth: function() {
 return window.innerWidth ? window.innerWidth : document.body && document.body.offsetWidth ? document.body.offsetWidth : document.compatMode == "CSS1Compat" && document.documentElement && document.documentElement.offsetWidth ? document.documentElement.offsetWidth : 320;
+},
+getWindowHeight: function() {
+return window.innerHeight ? window.innerHeight : document.body && document.body.offsetHeight ? document.body.offsetHeight : document.compatMode == "CSS1Compat" && document.documentElement && document.documentElement.offsetHeight ? document.documentElement.offsetHeight : 480;
 },
 _ieCssToPixelValue: function(e, t) {
 var n = t, r = e.style, i = r.left, s = e.runtimeStyle && e.runtimeStyle.left;
@@ -1266,6 +1358,24 @@ return this.calcBoxExtents(e, "padding");
 },
 calcMarginExtents: function(e) {
 return this.calcBoxExtents(e, "margin");
+},
+calcNodePosition: function(e, t) {
+var n = 0, r = 0, i = e, s = i.offsetWidth, o = i.offsetHeight, u = enyo.dom.getStyleTransformProp(), a = /translateX\((-?\d+)px\)/i, f = /translateY\((-?\d+)px\)/i, l = 0, c = 0, h = 0, p = 0;
+t ? (h = t.offsetHeight, p = t.offsetWidth) : (h = document.body.parentNode.offsetHeight > this.getWindowHeight() ? this.getWindowHeight() - document.body.parentNode.scrollTop : document.body.parentNode.offsetHeight, p = document.body.parentNode.offsetWidth > this.getWindowWidth() ? this.getWindowWidth() - document.body.parentNode.scrollLeft : document.body.parentNode.offsetWidth);
+if (i.offsetParent) do r += i.offsetLeft - (i.offsetParent ? i.offsetParent.scrollLeft : 0), u && a.test(i.style[u]) && (r += parseInt(i.style[u].replace(a, "$1"), 10)), n += i.offsetTop - (i.offsetParent ? i.offsetParent.scrollTop : 0), u && f.test(i.style[u]) && (n += parseInt(i.style[u].replace(f, "$1"), 10)), i !== e && (i.currentStyle ? (l = parseInt(i.currentStyle.borderLeftWidth, 10), c = parseInt(i.currentStyle.borderTopWidth, 10)) : window.getComputedStyle ? (l = parseInt(window.getComputedStyle(i, "").getPropertyValue("border-left-width"), 10), c = parseInt(window.getComputedStyle(i, "").getPropertyValue("border-top-width"), 10)) : (l = parseInt(i.style.borderLeftWidth, 10), c = parseInt(i.style.borderTopWidth, 10)), l && (r += l), c && (n += c)); while ((i = i.offsetParent) && i !== t);
+return {
+top: n,
+left: r,
+bottom: h - n - o,
+right: p - r - s,
+height: o,
+width: s
+};
+},
+setInnerHtml: function(e, t) {
+enyo.execUnsafeLocalFunction(function() {
+e.innerHTML = t;
+});
 }
 };
 
@@ -1441,19 +1551,19 @@ if (this.parent) {
 this.parent.beforeChildRender(this);
 if (!this.parent.generated) return this;
 }
-return this.hasNode() || this.renderNode(), this.hasNode() && (this.renderDom(), this.rendered()), this;
+return this.hasNode() || this.renderNode(), this.hasNode() && (this.renderDom(), this.generated && this.rendered()), this;
 },
 renderInto: function(e) {
 this.teardownRender();
 var t = enyo.dom.byId(e);
-return t == document.body ? this.setupBodyFitting() : this.fit && this.addClass("enyo-fit enyo-clip"), this.addClass("enyo-no-touch-action"), this.setupOverflowScrolling(), t.innerHTML = this.generateHtml(), this.rendered(), this;
+return t == document.body ? this.setupBodyFitting() : this.fit && this.addClass("enyo-fit enyo-clip"), this.addClass("enyo-no-touch-action"), this.setupOverflowScrolling(), enyo.dom.setInnerHtml(t, this.generateHtml()), this.generated && this.rendered(), this;
 },
 write: function() {
-return this.fit && this.setupBodyFitting(), this.addClass("enyo-no-touch-action"), this.setupOverflowScrolling(), document.write(this.generateHtml()), this.rendered(), this;
+return this.fit && this.setupBodyFitting(), this.addClass("enyo-no-touch-action"), this.setupOverflowScrolling(), document.write(this.generateHtml()), this.generated && this.rendered(), this;
 },
 rendered: function() {
 this.reflow();
-for (var e = 0, t; t = this.children[e]; e++) t.rendered();
+for (var e = 0, t; t = this.children[e]; e++) t.generated && t.rendered();
 },
 show: function() {
 this.setShowing(!0);
@@ -1462,12 +1572,12 @@ hide: function() {
 this.setShowing(!1);
 },
 getBounds: function() {
-var e = this.node || this.hasNode() || 0;
-return {
-left: e.offsetLeft,
-top: e.offsetTop,
-width: e.offsetWidth,
-height: e.offsetHeight
+var e = this.node || this.hasNode(), t = enyo.dom.getBounds(e);
+return t || {
+left: undefined,
+top: undefined,
+width: undefined,
+height: undefined
 };
 },
 setBounds: function(e, t) {
@@ -1477,6 +1587,18 @@ o = e[u];
 if (o || o === 0) n[u] = o + (enyo.isString(o) ? "" : r);
 }
 this.domStylesChanged();
+},
+getAbsoluteBounds: function() {
+var e = 0, t = 0, n = this.hasNode(), r = n ? n.offsetWidth : 0, i = n ? n.offsetHeight : 0;
+while (n) e += n.offsetLeft - (n.offsetParent ? n.offsetParent.scrollLeft : 0), t += n.offsetTop - (n.offsetParent ? n.offsetParent.scrollTop : 0), n = n.offsetParent;
+return {
+top: t,
+left: e,
+bottom: document.body.offsetHeight - t - i,
+right: document.body.offsetWidth - e - r,
+height: i,
+width: r
+};
 },
 findNodeById: function() {
 return this.id && (this.node = enyo.dom.byId(this.id));
@@ -1559,7 +1681,7 @@ renderDom: function() {
 this.renderAttributes(), this.renderStyles(), this.renderContent();
 },
 renderContent: function() {
-this.generated && this.teardownChildren(), this.node.innerHTML = this.generateInnerHtml();
+this.generated && this.teardownChildren(), enyo.dom.setInnerHtml(this.node, this.generateInnerHtml());
 },
 renderStyles: function() {
 this.hasNode() && this.stylesToNode();
@@ -1579,6 +1701,10 @@ this.syncDisplayToShowing();
 },
 getShowing: function() {
 return this.showing = this.domStyles.display != "none";
+},
+getAbsoluteShowing: function() {
+var e = this.getBounds();
+return this.getShowing() === !1 || e.height === 0 && e.width === 0 ? !1 : this.parent && this.parent.getAbsoluteShowing ? this.parent.getAbsoluteShowing() : !0;
 },
 fitChanged: function(e) {
 this.parent.reflow();
@@ -1679,6 +1805,9 @@ extra: {
 silk: 2
 }
 }, {
+platform: "windowsPhone",
+regex: /Windows Phone (?:OS )?(\d+)[.\d]+/
+}, {
 platform: "ie",
 regex: /MSIE (\d+)/
 }, {
@@ -1696,6 +1825,9 @@ regex: /Chrome\/(\d+)[.\d]+/
 }, {
 platform: "androidFirefox",
 regex: /Android;.*Firefox\/(\d+)/
+}, {
+platform: "firefoxOS",
+regex: /Mobile;.*Firefox\/(\d+)/
 }, {
 platform: "firefox",
 regex: /Firefox\/(\d+)/
@@ -1769,14 +1901,17 @@ for (var t = 0, n; n = e[t]; t++) document.addEventListener(n, enyo.bind(enyo.Si
 enyo.$ = {}, enyo.dispatcher = {
 events: [ "mousedown", "mouseup", "mouseover", "mouseout", "mousemove", "mousewheel", "click", "dblclick", "change", "keydown", "keyup", "keypress", "input" ],
 windowEvents: [ "resize", "load", "unload", "message" ],
+cssEvents: [ "webkitTransitionEnd", "transitionend" ],
 features: [],
 connect: function() {
 var e = enyo.dispatcher, t, n;
 for (t = 0; n = e.events[t]; t++) e.listen(document, n);
+for (t = 0; n = e.cssEvents[t]; t++) e.listen(document, n);
 for (t = 0; n = e.windowEvents[t]; t++) {
 if (n === "unload" && typeof window.chrome == "object" && window.chrome.app) continue;
 e.listen(window, n);
 }
+for (t = 0; n = e.cssEvents[t]; t++) e.listen(document, n);
 },
 listen: function(e, t, n) {
 var r = enyo.dispatch;
@@ -1816,7 +1951,9 @@ dispatchBubble: function(e, t) {
 return t.bubble("on" + e.type, e, t);
 }
 }, enyo.iePreventDefault = function() {
+try {
 this.returnValue = !1;
+} catch (e) {}
 }, enyo.dispatch = function(e) {
 return enyo.dispatcher.dispatch(e);
 }, enyo.bubble = function(e) {
@@ -1832,7 +1969,12 @@ typeof n == "object" && typeof n.hasNode == "function" && enyo.forEach(t, functi
 this.hasNode() && enyo.dispatcher.listen(this.node, t, e);
 }, n);
 };
-}(), enyo.requiresWindow(enyo.dispatcher.connect);
+}(), enyo.requiresWindow(enyo.dispatcher.connect), enyo.dispatcher.features.push(function(e) {
+if ("click" === e.type && e.clientX === 0 && e.clientY === 0) {
+var t = enyo.clone(e);
+t.type = "tap", enyo.dispatch(t);
+}
+});
 
 // preview.js
 
@@ -1978,7 +2120,7 @@ t.preventDefault = function() {
 e.preventDefault();
 }, t.type = "mousewheel";
 var n = t.VERTICAL_AXIS == t.axis ? "wheelDeltaY" : "wheelDeltaX";
-t[n] = t.detail * -12, enyo.dispatch(t);
+t[n] = t.detail * -40, enyo.dispatch(t);
 }, !1);
 });
 
@@ -2125,6 +2267,10 @@ i.xVelocity = t, i.yVelocity = n, i.velocity = r, enyo.dispatch(i);
 }
 };
 
+// transition.js
+
+enyo.dom.transition = enyo.platform.ios || enyo.platform.android || enyo.platform.chrome || enyo.platform.androidChrome || enyo.platform.safari ? "-webkit-transition" : enyo.platform.firefox || enyo.platform.firefoxOS || enyo.platform.androidFirefox ? "-moz-transition" : "transition";
+
 // touch.js
 
 enyo.requiresWindow(function() {
@@ -2135,7 +2281,7 @@ e.events = n, e.events.touchstart(t);
 var n = {
 _touchCount: 0,
 touchstart: function(t) {
-enyo.job.stop("resetGestureEvents"), this._touchCount += t.changedTouches.length, this.excludedTarget = null;
+this._touchCount += t.changedTouches.length, this.excludedTarget = null;
 var n = this.makeEvent(t);
 e.down(n), n = this.makeEvent(t), this.overEvent = n, e.over(n);
 },
@@ -2146,10 +2292,11 @@ this.excludedTarget = n && n.dragInfo && n.dragInfo.node;
 var r = this.makeEvent(t);
 e.move(r), enyo.bodyIsFitting && t.preventDefault(), this.overEvent && this.overEvent.target != r.target && (this.overEvent.relatedTarget = r.target, r.relatedTarget = this.overEvent.target, e.out(this.overEvent), e.over(r)), this.overEvent = r;
 },
-touchend: function(n) {
-e.up(this.makeEvent(n)), e.out(this.overEvent), this._touchCount -= n.changedTouches.length, enyo.platform.chrome && this._touchCount === 0 && enyo.job("resetGestureEvents", function() {
-e.events = t;
-}, 10);
+touchend: function(t) {
+e.up(this.makeEvent(t)), e.out(this.overEvent), this._touchCount -= t.changedTouches.length;
+},
+mouseup: function(n) {
+this._touchCount === 0 && (this.sawMousedown = !1, e.events = t);
 },
 makeEvent: function(e) {
 var t = enyo.clone(e.changedTouches[0]);
@@ -2205,18 +2352,10 @@ var t = [ "MSPointerDown", "MSPointerUp", "MSPointerMove", "MSPointerOver", "MSP
 enyo.forEach(t, function(e) {
 enyo.dispatcher.listen(document, e);
 }), enyo.dispatcher.features.push(function(e) {
-s[e.type] && e.isPrimary && s[e.type](e);
+i[e.type] && e.isPrimary && i[e.type](e);
 }), enyo.gesture.events = {};
 }
 var n = function(t, n) {
-var r = enyo.clone(n);
-r = enyo.mixin(r, {
-type: t,
-srcEvent: n,
-preventDefault: e.preventDefault,
-disablePrevention: e.disablePrevention
-});
-}, r = function(t, n) {
 var r = enyo.clone(n);
 return enyo.mixin(r, {
 pageX: n.translationX || 0,
@@ -2227,32 +2366,32 @@ srcEvent: n,
 preventDefault: e.preventDefault,
 disablePrevention: e.disablePrevention
 });
-}, i = function(e) {
+}, r = function(e) {
 var t = enyo.clone(e);
-return t.srcEvent = e, t.target = document.elementFromPoint(t.clientX, t.clientY), t.which = 1, t;
-}, s = {
+return t.srcEvent = e, t.which = 1, t;
+}, i = {
 MSPointerDown: function(t) {
-var n = i(t);
+var n = r(t);
 e.down(n);
 },
 MSPointerUp: function(t) {
-var n = i(t);
+var n = r(t);
 e.up(n);
 },
 MSPointerMove: function(t) {
-var n = i(t);
+var n = r(t);
 e.move(n);
 },
 MSPointerCancel: function(t) {
-var n = i(t);
+var n = r(t);
 e.up(n);
 },
 MSPointerOver: function(t) {
-var n = i(t);
+var n = r(t);
 e.over(n);
 },
 MSPointerOut: function(t) {
-var n = i(t);
+var n = r(t);
 e.out(n);
 }
 };
@@ -2470,7 +2609,7 @@ scroll: function() {
 this.doScroll();
 },
 scrollTo: function(e, t) {
-e !== null && (this.y = this.y0 - (e + this.y0) * (1 - this.kFrictionDamping)), t !== null && (this.x = this.x0 - (t + this.x0) * (1 - this.kFrictionDamping)), this.start();
+t !== null && (this.y = this.y0 - (t + this.y0) * (1 - this.kFrictionDamping)), e !== null && (this.x = this.x0 - (e + this.x0) * (1 - this.kFrictionDamping)), this.start();
 },
 setScrollX: function(e) {
 this.x = this.x0 = e;
@@ -2714,6 +2853,7 @@ components: [ {
 name: "client",
 classes: "enyo-touch-scroller"
 } ],
+listReordering: !1,
 create: function() {
 this.inherited(arguments), this.transform = enyo.dom.canTransform(), this.transform || this.overscroll && this.$.client.applyStyle("position", "relative"), this.accel = enyo.dom.canAccelerate();
 var e = "enyo-touch-strategy-container";
@@ -2738,10 +2878,12 @@ var t = this.container.hasNode();
 t && (this.$.scrim.parentNode = t, this.$.scrim.render());
 },
 isScrolling: function() {
-return this.$.scrollMath.isScrolling();
+var e = this.$.scrollMath;
+return e ? e.isScrolling() : this.scrolling;
 },
 isOverscrolling: function() {
-return this.overscroll ? this.$.scrollMath.isInOverScroll() : !1;
+var e = this.$.scrollMath || this;
+return this.overscroll ? e.isInOverScroll() : !1;
 },
 domScroll: function() {
 this.isScrolling() || (this.calcBoundaries(), this.syncScrollMath(), this.thumb && this.alertThumbs());
@@ -2762,10 +2904,10 @@ stop: function() {
 this.isScrolling() && this.$.scrollMath.stop(!0);
 },
 stabilize: function() {
-this.$.scrollMath.stabilize();
+this.$.scrollMath && this.$.scrollMath.stabilize();
 },
 scrollTo: function(e, t) {
-this.stop(), this.$.scrollMath.scrollTo(t || t === 0 ? t : null, e);
+this.stop(), this.$.scrollMath.scrollTo(e, t || t === 0 ? t : null);
 },
 scrollIntoView: function() {
 this.stop(), this.inherited(arguments);
@@ -2803,7 +2945,10 @@ var n = Math.abs(t.xVelocity) > Math.abs(t.yVelocity) ? this.$.scrollMath.horizo
 if (n && this.dragging) return this.$.scrollMath.flick(t), this.preventDragPropagation;
 },
 hold: function(e, t) {
-if (this.isScrolling() && !this.isOverscrolling()) return this.$.scrollMath.stop(t), !0;
+if (this.isScrolling() && !this.isOverscrolling()) {
+var n = this.$.scrollMath || this;
+return n.stop(t), !0;
+}
 },
 move: function(e, t) {},
 dragstart: function(e, t) {
@@ -2815,6 +2960,7 @@ if (this.preventDragPropagation) return !0;
 }
 },
 drag: function(e, t) {
+if (this.listReordering) return !1;
 this.dragging && (t.preventDefault(), this.$.scrollMath.drag(t), this.scrim && this.$.scrim.show());
 },
 dragfinish: function(e, t) {
@@ -2822,7 +2968,7 @@ this.dragging && (t.preventTap(), this.$.scrollMath.dragFinish(), this.dragging 
 },
 mousewheel: function(e, t) {
 if (!this.dragging) {
-this.calcBoundaries(), this.syncScrollMath();
+this.calcBoundaries(), this.syncScrollMath(), this.stabilize();
 if (this.$.scrollMath.mousewheel(t)) return t.preventDefault(), !0;
 }
 },
@@ -2836,12 +2982,12 @@ scrollMathStop: function(e) {
 this.effectScrollStop(), this.thumb && this.delayHideThumbs(100);
 },
 calcBoundaries: function() {
-var e = this.$.scrollMath, t = this._getScrollBounds();
+var e = this.$.scrollMath || this, t = this._getScrollBounds();
 e.bottomBoundary = t.clientHeight - t.height, e.rightBoundary = t.clientWidth - t.width;
 },
 syncScrollMath: function() {
 var e = this.$.scrollMath;
-e.setScrollX(-this.getScrollLeft()), e.setScrollY(-this.getScrollTop());
+e && (e.setScrollX(-this.getScrollLeft()), e.setScrollY(-this.getScrollTop()));
 },
 effectScroll: function(e, t) {
 this.scrollNode && (this.scrollLeft = this.scrollNode.scrollLeft = e, this.scrollTop = this.scrollNode.scrollTop = t, this.effectOverscroll(Math.round(e), Math.round(t)));
@@ -2857,7 +3003,7 @@ top: i + "px"
 });
 },
 getOverScrollBounds: function() {
-var e = this.$.scrollMath;
+var e = this.$.scrollMath || this;
 return {
 overleft: Math.min(e.leftBoundary - e.x, 0) || Math.max(e.rightBoundary - e.x, 0),
 overtop: Math.min(e.topBoundary - e.y, 0) || Math.max(e.bottomBoundary - e.y, 0)
@@ -2880,7 +3026,7 @@ updateThumbs: function() {
 this.$.vthumb.update(this), this.$.hthumb.update(this);
 },
 showThumbs: function() {
-this.syncThumbs(), this.$.vthumb.show(), this.$.hthumb.show();
+this.syncThumbs(), this.horizontal != "hidden" && this.$.hthumb.show(), this.vertical != "hidden" && this.$.vthumb.show();
 },
 hideThumbs: function() {
 this.$.vthumb.hide(), this.$.hthumb.hide();
@@ -2970,6 +3116,313 @@ this.translateOptimized && this.scrollNode && (this.scrollNode.scrollTop = 1, th
 down: enyo.nop
 });
 
+// TransitionScrollStrategy.js
+
+enyo.kind({
+name: "enyo.TransitionScrollStrategy",
+kind: "enyo.TouchScrollStrategy",
+components: [ {
+name: "clientContainer",
+classes: "enyo-touch-scroller",
+components: [ {
+name: "client"
+} ]
+} ],
+events: {
+onScrollStart: "",
+onScroll: "",
+onScrollStop: ""
+},
+handlers: {
+ondown: "down",
+ondragfinish: "dragfinish",
+onwebkitTransitionEnd: "transitionComplete"
+},
+tools: [ {
+name: "vthumb",
+kind: "ScrollThumb",
+axis: "v",
+showing: !0
+}, {
+name: "hthumb",
+kind: "ScrollThumb",
+axis: "h",
+showing: !1
+} ],
+kFlickScalar: 600,
+topBoundary: 0,
+rightBoundary: 0,
+bottomBoundary: 0,
+leftBoundary: 0,
+scrolling: !1,
+listener: null,
+boundaryX: 0,
+boundaryY: 0,
+stopTimeout: null,
+stopTimeoutMS: 80,
+scrollInterval: null,
+scrollIntervalMS: 50,
+transitions: {
+none: "",
+scroll: "3.8s cubic-bezier(.19,1,.28,1.0) 0s",
+bounce: "0.5s cubic-bezier(0.06,.5,.5,.94) 0s"
+},
+setScrollLeft: function(e) {
+var t = this.scrollLeft;
+this.stop(), this.scrollLeft = e;
+if (this.isInLeftOverScroll() || this.isInRightOverScroll()) this.scrollLeft = t;
+this.effectScroll();
+},
+setScrollTop: function(e) {
+var t = this.scrollTop;
+this.stop(), this.scrollTop = e;
+if (this.isInTopOverScroll() || this.isInBottomOverScroll()) this.scrollTop = t;
+this.effectScroll();
+},
+setScrollX: function(e) {
+this.scrollLeft = -1 * e;
+},
+setScrollY: function(e) {
+this.scrollTop = -1 * e;
+},
+getScrollLeft: function() {
+return this.scrollLeft;
+},
+getScrollTop: function() {
+return this.scrollTop;
+},
+create: function() {
+this.inherited(arguments), enyo.dom.transformValue(this.$.client, this.translation, "0,0,0");
+},
+destroy: function() {
+this.clearCSSTransitionInterval(), this.inherited(arguments);
+},
+getScrollSize: function() {
+var e = this.$.client.hasNode();
+return {
+width: e ? e.scrollWidth : 0,
+height: e ? e.scrollHeight : 0
+};
+},
+horizontalChanged: function() {
+this.horizontal == "hidden" && (this.scrollHorizontal = !1);
+},
+verticalChanged: function() {
+this.vertical == "hidden" && (this.scrollVertical = !1);
+},
+calcScrollNode: function() {
+return this.$.clientContainer.hasNode();
+},
+calcBoundaries: function() {
+var e = this._getScrollBounds();
+this.bottomBoundary = e.clientHeight - e.height, this.rightBoundary = e.clientWidth - e.width;
+},
+maxHeightChanged: function() {
+this.$.client.applyStyle("min-height", this.maxHeight ? null : "100%"), this.$.client.applyStyle("max-height", this.maxHeight), this.$.clientContainer.addRemoveClass("enyo-scrollee-fit", !this.maxHeight);
+},
+calcAutoScrolling: function() {
+var e = this.getScrollBounds();
+this.vertical && (this.scrollVertical = e.height > e.clientHeight), this.horizontal && (this.scrollHorizontal = e.width > e.clientWidth);
+},
+isInOverScroll: function() {
+return this.isInTopOverScroll() || this.isInBottomOverScroll() || this.isInLeftOverScroll() || this.isInRightOverScroll();
+},
+isInLeftOverScroll: function() {
+return this.getScrollLeft() < this.leftBoundary;
+},
+isInRightOverScroll: function() {
+return this.getScrollLeft <= 0 ? !1 : this.getScrollLeft() * -1 < this.rightBoundary;
+},
+isInTopOverScroll: function() {
+return this.getScrollTop() < this.topBoundary;
+},
+isInBottomOverScroll: function() {
+return this.getScrollTop() <= 0 ? !1 : this.getScrollTop() * -1 < this.bottomBoundary;
+},
+calcStartInfo: function() {
+var e = this.getScrollBounds(), t = this.getScrollTop(), n = this.getScrollLeft();
+this.startEdges = {
+top: t === 0,
+bottom: t === e.maxTop,
+left: n === 0,
+right: n === e.maxLeft
+};
+},
+mousewheel: function(e, t) {
+if (!this.dragging) {
+this.calcBoundaries(), this.syncScrollMath(), this.stabilize();
+var n = this.vertical ? t.wheelDeltaY || t.wheelDelta : 0, r = parseFloat(this.getScrollTop()) + -1 * parseFloat(n);
+return r = r * -1 < this.bottomBoundary ? -1 * this.bottomBoundary : r < this.topBoundary ? this.topBoundary : r, this.setScrollTop(r), this.doScroll(), t.preventDefault(), !0;
+}
+},
+scroll: function(e, t) {
+this.thumb && this.updateThumbs(), this.calcBoundaries(), this.doScroll();
+},
+start: function() {
+this.startScrolling(), this.doScrollStart();
+},
+stop: function() {
+this.isScrolling() && this.stopScrolling(), this.thumb && this.delayHideThumbs(100), this.doScrollStop();
+},
+updateX: function() {
+var e = window.getComputedStyle(this.$.client.node, null).getPropertyValue(enyo.dom.getCssTransformProp()).split("(")[1];
+return e = e == undefined ? 0 : e.split(")")[0].split(",")[4], -1 * parseFloat(e) === this.scrollLeft ? !1 : (this.scrollLeft = -1 * parseFloat(e), !0);
+},
+updateY: function() {
+var e = window.getComputedStyle(this.$.client.node, null).getPropertyValue(enyo.dom.getCssTransformProp()).split("(")[1];
+return e = e == undefined ? 0 : e.split(")")[0].split(",")[5], -1 * parseFloat(e) === this.scrollTop ? !1 : (this.scrollTop = -1 * parseFloat(e), !0);
+},
+effectScroll: function() {
+var e = -1 * this.scrollLeft + "px, " + -1 * this.scrollTop + "px" + (this.accel ? ", 0" : "");
+enyo.dom.transformValue(this.$.client, this.translation, e);
+},
+down: function(e, t) {
+var n = this;
+if (this.isScrolling() && !this.isOverscrolling()) return this.stopTimeout = setTimeout(function() {
+n.stop();
+}, this.stopTimeoutMS), !0;
+},
+dragstart: function(e, t) {
+this.stopTimeout && clearTimeout(this.stopTimeout);
+if (!this.dragDuringGesture && t.srcEvent.touches && t.srcEvent.touches.length > 1) return !0;
+this.shouldDrag(t), this.dragging = t.dragger == this || !t.dragger && t.boundaryDragger == this;
+if (this.dragging) {
+this.isScrolling() && this.stopScrolling(), this.thumb && this.showThumbs(), t.preventDefault(), this.prevY = t.pageY, this.prevX = t.pageX;
+if (this.preventDragPropagation) return !0;
+}
+},
+shouldDrag: function(e) {
+return this.calcStartInfo(), this.calcBoundaries(), this.calcAutoScrolling(), this.scrollHorizontal ? this.scrollVertical ? this.shouldDragVertical(e) || this.shouldDragHorizontal(e) : this.shouldDragHorizontal(e) : this.shouldDragVertical(e);
+},
+shouldDragVertical: function(e) {
+var t = this.canDragVertical(e), n = this.oobVertical(e);
+!e.boundaryDragger && t && (e.boundaryDragger = this);
+if (!n && t) return e.dragger = this, !0;
+},
+shouldDragHorizontal: function(e) {
+var t = this.canDragHorizontal(e), n = this.oobHorizontal(e);
+!e.boundaryDragger && t && (e.boundaryDragger = this);
+if (!n && t) return e.dragger = this, !0;
+},
+canDragVertical: function(e) {
+return this.scrollVertical && e.vertical;
+},
+canDragHorizontal: function(e) {
+return this.scrollHorizontal && !e.vertical;
+},
+oobVertical: function(e) {
+var t = e.dy < 0;
+return !t && this.startEdges.top || t && this.startEdges.bottom;
+},
+oobHorizontal: function(e) {
+var t = e.dx < 0;
+return !t && this.startEdges.left || t && this.startEdges.right;
+},
+drag: function(e, t) {
+if (this.listReordering) return !1;
+this.dragging && (t.preventDefault(), this.scrollLeft = this.scrollHorizontal ? this.calculateDragDistance(parseInt(this.getScrollLeft(), 10), -1 * (t.pageX - this.prevX), this.leftBoundary, this.rightBoundary) : this.getScrollLeft(), this.scrollTop = this.scrollVertical ? this.calculateDragDistance(this.getScrollTop(), -1 * (t.pageY - this.prevY), this.topBoundary, this.bottomBoundary) : this.getScrollTop(), this.effectScroll(), this.scroll(), this.prevY = t.pageY, this.prevX = t.pageX, this.resetBoundaryX(), this.resetBoundaryY());
+},
+calculateDragDistance: function(e, t, n, r) {
+var i = e + t;
+return this.overscrollDragDamping(e, i, t, n, r);
+},
+overscrollDragDamping: function(e, t, n, r, i) {
+if (t < r || t * -1 < i) n /= 2, t = e + n;
+return t;
+},
+resetBoundaryX: function() {
+this.boundaryX = 0;
+},
+resetBoundaryY: function() {
+this.boundaryY = 0;
+},
+dragfinish: function(e, t) {
+this.dragging && (t.preventTap(), this.dragging = !1, this.isScrolling() || this.correctOverflow(), this.scrim && this.$.scrim.hide());
+},
+correctOverflow: function() {
+if (this.isInOverScroll()) {
+var e = this.scrollHorizontal ? this.correctOverflowX() : !1, t = this.scrollVertical ? this.correctOverflowY() : !1;
+e !== !1 && t !== !1 ? (this.scrollLeft = e !== !1 ? e : this.getScrollLeft(), this.scrollTop = t !== !1 ? t : this.getScrollTop(), this.startOverflowScrolling()) : e !== !1 ? (this.scrollLeft = e, this.scrollTop = this.targetScrollTop || this.scrollTop, this.targetScrollLeft = this.getScrollLeft(), this.vertical ? this.startScrolling() : this.startOverflowScrolling()) : t !== !1 && (this.scrollTop = t, this.scrollLeft = this.targetScrollLeft || this.scrollLeft, this.targetScrollTop = this.getScrollTop(), this.scrollHorizontal ? this.startScrolling() : this.startOverflowScrolling());
+}
+},
+correctOverflowX: function() {
+if (this.isInLeftOverScroll()) {
+if (this.beyondBoundary(this.getScrollLeft(), this.leftBoundary, this.boundaryX)) return this.leftBoundary;
+} else if (this.isInRightOverScroll() && this.beyondBoundary(this.getScrollLeft(), this.rightBoundary, this.boundaryX)) return -1 * this.rightBoundary;
+return !1;
+},
+correctOverflowY: function() {
+if (this.isInTopOverScroll()) {
+if (this.beyondBoundary(this.getScrollTop(), this.topBoundary, this.boundaryY)) return this.topBoundary;
+} else if (this.isInBottomOverScroll() && this.beyondBoundary(this.getScrollTop(), this.bottomBoundary, this.boundaryY)) return -1 * this.bottomBoundary;
+return !1;
+},
+beyondBoundary: function(e, t, n) {
+return Math.abs(Math.abs(t) - Math.abs(e)) > Math.abs(n);
+},
+flick: function(e, t) {
+if (this.dragging && this.flickOnEnabledAxis(t)) return this.scrollLeft = this.scrollHorizontal ? this.calculateFlickDistance(this.scrollLeft, -1 * t.xVelocity) : this.getScrollLeft(), this.scrollTop = this.scrollVertical ? this.calculateFlickDistance(this.scrollTop, -1 * t.yVelocity) : this.getScrollTop(), this.targetScrollLeft = this.scrollLeft, this.targetScrollTop = this.scrollTop, this.boundaryX = null, this.boundaryY = null, this.isInLeftOverScroll() ? this.boundaryX = this.figureBoundary(this.getScrollLeft()) : this.isInRightOverScroll() && (this.boundaryX = this.figureBoundary(-1 * this.bottomBoundary - this.getScrollLeft())), this.isInTopOverScroll() ? this.boundaryY = this.figureBoundary(this.getScrollTop()) : this.isInBottomOverScroll() && (this.boundaryY = this.figureBoundary(-1 * this.bottomBoundary - this.getScrollTop())), this.startScrolling(), this.preventDragPropagation;
+},
+flickOnEnabledAxis: function(e) {
+return Math.abs(e.xVelocity) > Math.abs(e.yVelocity) ? this.scrollHorizontal : this.scrollVertical;
+},
+calculateFlickDistance: function(e, t) {
+return e + t * this.kFlickScalar;
+},
+startScrolling: function() {
+this.applyTransition("scroll"), this.effectScroll(), this.setCSSTransitionInterval(), this.scrolling = !0;
+},
+startOverflowScrolling: function() {
+this.applyTransition("bounce"), this.effectScroll(), this.setOverflowTransitionInterval(), this.scrolling = !0;
+},
+applyTransition: function(e) {
+var t = this.translation + ": " + this.transitions[e];
+this.$.client.applyStyle("-webkit-transition", this.transitions[e]);
+},
+stopScrolling: function() {
+this.resetCSSTranslationVals(), this.clearCSSTransitionInterval(), this.scrolling = !1;
+},
+setCSSTransitionInterval: function() {
+this.clearCSSTransitionInterval(), this.scrollInterval = setInterval(enyo.bind(this, function() {
+this.updateScrollPosition(), this.correctOverflow();
+}), this.scrollIntervalMS);
+},
+setOverflowTransitionInterval: function() {
+this.clearCSSTransitionInterval(), this.scrollInterval = setInterval(enyo.bind(this, function() {
+this.updateScrollPosition();
+}), this.scrollIntervalMS);
+},
+updateScrollPosition: function() {
+var e = this.updateY(), t = this.updateX();
+this.scroll(), !e && !t && this.stop();
+},
+clearCSSTransitionInterval: function() {
+this.scrollInterval && (clearInterval(this.scrollInterval), this.scrollInterval = null);
+},
+resetCSSTranslationVals: function() {
+var e = enyo.dom.getCssTransformProp(), t = window.getComputedStyle(this.$.client.node, null).getPropertyValue(e).split("(")[1].split(")")[0].split(",");
+this.applyTransition("none"), this.scrollLeft = -1 * t[4], this.scrollTop = -1 * t[5], this.effectScroll();
+},
+figureBoundary: function(e) {
+var t = Math.abs(e), n = t - t / Math.pow(t, .02);
+return n = e < 0 ? -1 * n : n, n;
+},
+transitionComplete: function(e, t) {
+if (t.originator !== this.$.client) return;
+var n = !1;
+this.isInTopOverScroll() ? (n = !0, this.scrollTop = this.topBoundary) : this.isInBottomOverScroll() && (n = !0, this.scrollTop = -1 * this.bottomBoundary), this.isInLeftOverScroll() ? (n = !0, this.scrollLeft = this.leftBoundary) : this.isInRightOverScroll() && (n = !0, this.scrollLeft = -1 * this.rightBoundary), n ? this.startOverflowScrolling() : this.stop();
+},
+scrollTo: function(e, t) {
+this.setScrollTop(t), this.setScrollLeft(e), this.start();
+},
+getOverScrollBounds: function() {
+return {
+overleft: Math.min(this.leftBoundary + this.scrollLeft, 0) || Math.max(this.rightBoundary + this.scrollLeft, 0),
+overtop: Math.min(this.topBoundary + this.scrollTop, 0) || Math.max(this.bottomBoundary + this.scrollTop, 0)
+};
+}
+});
+
 // Scroller.js
 
 enyo.kind({
@@ -2989,6 +3442,9 @@ onScrollStart: "",
 onScroll: "",
 onScrollStop: ""
 },
+touchOverscroll: !0,
+preventDragPropagation: !0,
+preventScrollPropagation: !0,
 handlers: {
 onscroll: "domScroll",
 onScrollStart: "scrollStart",
@@ -2996,9 +3452,6 @@ onScroll: "scroll",
 onScrollStop: "scrollStop"
 },
 classes: "enyo-scroller",
-touchOverscroll: !0,
-preventDragPropagation: !0,
-preventScrollPropagation: !0,
 statics: {
 osInfo: [ {
 os: "android",
@@ -3008,6 +3461,9 @@ os: "androidChrome",
 version: 18
 }, {
 os: "androidFirefox",
+version: 16
+}, {
+os: "firefoxOS",
 version: 16
 }, {
 os: "ios",
@@ -3021,14 +3477,14 @@ version: 1e9
 } ],
 hasTouchScrolling: function() {
 for (var e = 0, t, n; t = this.osInfo[e]; e++) if (enyo.platform[t.os]) return !0;
-if (enyo.platform.ie >= 10 && enyo.platform.touch) return !0;
+if ((enyo.platform.ie >= 10 || enyo.platform.windowsPhone >= 8) && enyo.platform.touch) return !0;
 },
 hasNativeScrolling: function() {
 for (var e = 0, t, n; t = this.osInfo[e]; e++) if (enyo.platform[t.os] < t.version) return !1;
 return !0;
 },
 getTouchStrategy: function() {
-return enyo.platform.android >= 3 ? "TranslateScrollStrategy" : "TouchScrollStrategy";
+return enyo.platform.android >= 3 || enyo.platform.windowsPhone === 8 ? "TranslateScrollStrategy" : "TouchScrollStrategy";
 }
 },
 controlParentName: "strategy",
@@ -3137,7 +3593,7 @@ scrollToBottom: function() {
 this.setScrollTop(this.getScrollBounds().maxTop);
 },
 scrollToRight: function() {
-this.setScrollTop(this.getScrollBounds().maxLeft);
+this.setScrollLeft(this.getScrollBounds().maxLeft);
 },
 scrollToLeft: function() {
 this.setScrollLeft(0);
@@ -3263,10 +3719,10 @@ onclear: "clear",
 ondragstart: "dragstart"
 },
 create: function() {
-enyo.platform.ie && (this.handlers.onkeyup = "iekeyup"), this.inherited(arguments), this.placeholderChanged(), this.type && this.typeChanged(), this.valueChanged();
+enyo.platform.ie && (this.handlers.onkeyup = "iekeyup"), enyo.platform.windowsPhone && (this.handlers.onkeydown = "iekeydown"), this.inherited(arguments), this.placeholderChanged(), this.type && this.typeChanged(), this.valueChanged();
 },
 rendered: function() {
-this.inherited(arguments), enyo.makeBubble(this, "focus", "blur"), this.disabledChanged(), this.defaultFocus && this.focus();
+this.inherited(arguments), enyo.makeBubble(this, "focus", "blur"), enyo.platform.ie == 8 && this.setAttribute("onchange", enyo.bubbler), this.disabledChanged(), this.defaultFocus && this.focus();
 },
 typeChanged: function() {
 this.setAttribute("type", this.type);
@@ -3287,14 +3743,21 @@ iekeyup: function(e, t) {
 var n = enyo.platform.ie, r = t.keyCode;
 (n <= 8 || n == 9 && (r == 8 || r == 46)) && this.bubble("oninput", t);
 },
+iekeydown: function(e, t) {
+var n = enyo.platform.windowsPhone, r = t.keyCode, i = t.dispatchTarget;
+n <= 8 && r == 13 && this.tag == "input" && i.hasNode() && i.node.blur();
+},
 clear: function() {
 this.setValue("");
 },
 focus: function() {
 this.hasNode() && this.node.focus();
 },
+hasFocus: function() {
+if (this.hasNode()) return document.activeElement === this.node;
+},
 dragstart: function() {
-return !0;
+return this.hasFocus();
 },
 focused: function() {
 this.selectOnFocus && enyo.asyncMethod(this, "selectContents");
@@ -3414,7 +3877,7 @@ onchange: "change"
 tag: "select",
 defaultKind: "enyo.Option",
 rendered: function() {
-this.inherited(arguments), this.selectedChanged();
+this.inherited(arguments), enyo.platform.ie == 8 && this.setAttribute("onchange", enyo.bubbler), this.selectedChanged();
 },
 getSelected: function() {
 return Number(this.getNodeProperty("selectedIndex", this.selected));
@@ -3553,16 +4016,16 @@ rendered: function() {
 this.inherited(arguments), this.active && this.activeChanged(), this.checkedChanged();
 },
 getChecked: function() {
-return Boolean(this.getNodeProperty("checked", this.checked));
+return enyo.isTrue(this.getNodeProperty("checked", this.checked));
 },
 checkedChanged: function() {
 this.setNodeProperty("checked", this.checked), this.setAttribute("checked", this.checked ? "checked" : ""), this.setActive(this.checked);
 },
 activeChanged: function() {
-this.active = Boolean(this.active), this.setChecked(this.active), this.bubble("onActivate");
+this.active = enyo.isTrue(this.active), this.setChecked(this.active), this.bubble("onActivate");
 },
 setValue: function(e) {
-this.setChecked(Boolean(e));
+this.setChecked(enyo.isTrue(e));
 },
 getValue: function() {
 return this.getChecked();
@@ -3748,13 +4211,16 @@ height: e.offsetHeight
 };
 },
 updatePosition: function() {
-if (this.centered) {
 var e = this.calcViewportSize(), t = this.getBounds();
-this.addStyles("top: " + Math.max((e.height - t.height) / 2, 0) + "px; left: " + Math.max((e.width - t.width) / 2, 0) + "px;");
-}
+if (this.targetPosition) {
+var n = this.targetPosition;
+typeof n.left == "number" ? n.left + t.width > e.width ? (n.left - t.width >= 0 ? n.right = e.width - n.left : n.right = 0, n.left = null) : n.right = null : typeof n.right == "number" && (n.right + t.width > e.width ? (n.right - t.width >= 0 ? n.left = e.width - n.right : n.left = 0, n.right = null) : n.left = null), typeof n.top == "number" ? n.top + t.height > e.height ? (n.top - t.height >= 0 ? n.bottom = e.height - n.top : n.bottom = 0, n.top = null) : n.bottom = null : typeof n.bottom == "number" && (n.bottom + t.height > e.height ? (n.bottom - t.height >= 0 ? n.top = e.height - n.bottom : n.top = 0, n.bottom = null) : n.top = null), this.addStyles("left: " + (n.left !== null ? n.left + "px" : "initial") + "; right: " + (n.right !== null ? n.right + "px" : "initial") + "; top: " + (n.top !== null ? n.top + "px" : "initial") + "; bottom: " + (n.bottom !== null ? n.bottom + "px" : "initial") + ";");
+} else this.centered && this.addStyles("top: " + Math.max((e.height - t.height) / 2, 0) + "px; left: " + Math.max((e.width - t.width) / 2, 0) + "px;");
 },
 showingChanged: function() {
-this.floating && this.showing && !this.hasNode() && this.render(), this.centered && this.applyStyle("visibility", "hidden"), this.inherited(arguments), this.showing ? (this.resized(), this.captureEvents && this.capture()) : this.captureEvents && this.release(), this.centered && this.applyStyle("visibility", null), this.hasNode() && this[this.showing ? "doShow" : "doHide"]();
+this.floating && this.showing && !this.hasNode() && this.render();
+if (this.centered || this.targetPosition) this.applyStyle("visibility", "hidden"), this.addStyles("top: 0px; left: 0px; right: initial; bottom: initial;");
+this.inherited(arguments), this.showing ? (this.resized(), this.captureEvents && this.capture()) : this.captureEvents && this.release(), (this.centered || this.targetPosition) && this.applyStyle("visibility", null), this.hasNode() && this[this.showing ? "doShow" : "doHide"]();
 },
 capture: function() {
 enyo.dispatcher.capture(this, !this.modal);
@@ -3791,6 +4257,16 @@ return this.show(), !0;
 },
 requestHide: function(e, t) {
 return this.hide(), !0;
+},
+showAtEvent: function(e, t) {
+var n = {
+left: e.centerX || e.clientX || e.pageX,
+top: e.centerY || e.clientY || e.pageY
+};
+t && (n.left += t.left || 0, n.top += t.top || 0), this.showAtPosition(n);
+},
+showAtPosition: function(e) {
+this.targetPosition = e, this.show();
 }
 });
 
@@ -3879,7 +4355,25 @@ this.applyStyle("background-image", "url(" + enyo.path.rewrite(this.src) + ")");
 enyo.kind({
 name: "onyx.Button",
 kind: "enyo.Button",
-classes: "onyx-button enyo-unselectable"
+classes: "onyx-button enyo-unselectable",
+create: function() {
+enyo.platform.firefoxOS && (this.handlers.ondown = "fxosDown", this.handlers.onenter = "fxosEnter", this.handlers.ondrag = "fxosDrag", this.handlers.onleave = "fxosLeave", this.handlers.onup = "fxosUp"), this.inherited(arguments);
+},
+fxosDown: function(e, t) {
+this.addClass("pressed"), this._isInControl = !0;
+},
+fxosEnter: function(e, t) {
+this._isInControl = !0;
+},
+fxosDrag: function(e, t) {
+this.addRemoveClass("pressed", this._isInControl);
+},
+fxosLeave: function(e, t) {
+this._isInControl = !1;
+},
+fxosUp: function(e, t) {
+this.removeClass("pressed"), this._isInControl = !1;
+}
 });
 
 // IconButton.js
@@ -3891,6 +4385,24 @@ published: {
 active: !1
 },
 classes: "onyx-icon-button",
+create: function() {
+enyo.platform.firefoxOS && (this.handlers.ondown = "fxosDown", this.handlers.onenter = "fxosEnter", this.handlers.ondrag = "fxosDrag", this.handlers.onleave = "fxosLeave", this.handlers.onup = "fxosUp"), this.inherited(arguments);
+},
+fxosDown: function(e, t) {
+this.addClass("pressed"), this._isInControl = !0;
+},
+fxosEnter: function(e, t) {
+this._isInControl = !0;
+},
+fxosDrag: function(e, t) {
+this.addRemoveClass("pressed", this._isInControl);
+},
+fxosLeave: function(e, t) {
+this._isInControl = !1;
+},
+fxosUp: function(e, t) {
+this.removeClass("pressed"), this._isInControl = !1;
+},
 rendered: function() {
 this.inherited(arguments), this.activeChanged();
 },
@@ -3911,78 +4423,20 @@ classes: "onyx-checkbox",
 kind: enyo.Checkbox,
 tag: "div",
 handlers: {
-ondown: "downHandler",
 onclick: ""
 },
-downHandler: function(e, t) {
-return this.disabled || (this.setChecked(!this.getChecked()), this.bubble("onchange")), !0;
-},
 tap: function(e, t) {
-return !this.disabled;
-}
+return this.disabled || (this.setChecked(!this.getChecked()), this.bubble("onchange")), !this.disabled;
+},
+dragstart: function() {}
 });
 
 // Drawer.js
 
 enyo.kind({
 name: "onyx.Drawer",
-published: {
-open: !0,
-orient: "v",
-animated: !0
-},
-style: "overflow: hidden; position: relative;",
-tools: [ {
-kind: "Animator",
-onStep: "animatorStep",
-onEnd: "animatorEnd"
-}, {
-name: "client",
-style: "position: relative;",
-classes: "enyo-border-box"
-} ],
-create: function() {
-this.inherited(arguments), this.animatedChanged(), this.openChanged();
-},
-initComponents: function() {
-this.createChrome(this.tools), this.inherited(arguments);
-},
-animatedChanged: function() {
-!this.animated && this.hasNode() && this.$.animator.isAnimating() && (this.$.animator.stop(), this.animatorEnd());
-},
-openChanged: function() {
-this.$.client.show();
-if (this.hasNode()) if (this.$.animator.isAnimating()) this.$.animator.reverse(); else {
-var e = this.orient == "v", t = e ? "height" : "width", n = e ? "top" : "left";
-this.applyStyle(t, null);
-var r = this.hasNode()[e ? "scrollHeight" : "scrollWidth"];
-this.animated ? this.$.animator.play({
-startValue: this.open ? 0 : r,
-endValue: this.open ? r : 0,
-dimension: t,
-position: n
-}) : this.animatorEnd();
-} else this.$.client.setShowing(this.open);
-},
-animatorStep: function(e) {
-if (this.hasNode()) {
-var t = e.dimension;
-this.node.style[t] = this.domStyles[t] = e.value + "px";
-}
-var n = this.$.client.hasNode();
-if (n) {
-var r = e.position, i = this.open ? e.endValue : e.startValue;
-n.style[r] = this.$.client.domStyles[r] = e.value - i + "px";
-}
-this.container && this.container.resized();
-},
-animatorEnd: function() {
-if (!this.open) this.$.client.hide(); else {
-var e = this.orient == "v", t = e ? "height" : "width", n = e ? "top" : "left", r = this.$.client.hasNode();
-r && (r.style[n] = this.$.client.domStyles[n] = null), this.node && (this.node.style[t] = this.domStyles[t] = null);
-}
-this.container && this.container.resized();
-}
+kind: "enyo.Drawer",
+published: {}
 });
 
 // Grabber.js
@@ -4239,21 +4693,21 @@ create: function() {
 this.inherited(arguments), this.maxHeightChanged();
 },
 initComponents: function() {
-this.scrolling ? this.createComponents(this.childComponents, {
+this.scrolling && this.createComponents(this.childComponents, {
 isChrome: !0
-}) : enyo.nop, this.inherited(arguments);
+}), this.inherited(arguments);
 },
 getScroller: function() {
 return this.$[this.scrollerName];
 },
 maxHeightChanged: function() {
-this.scrolling ? this.getScroller().setMaxHeight(this.maxHeight + "px") : enyo.nop;
+this.scrolling && this.getScroller().setMaxHeight(this.maxHeight + "px");
 },
 itemActivated: function(e, t) {
 return t.originator.setActive(!1), !0;
 },
 showingChanged: function() {
-this.inherited(arguments), this.scrolling ? this.getScroller().setShowing(this.showing) : enyo.nop, this.adjustPosition(!0);
+this.inherited(arguments), this.scrolling && this.getScroller().setShowing(this.showing), this.adjustPosition(!0);
 },
 requestMenuShow: function(e, t) {
 if (this.floating) {
@@ -4271,7 +4725,7 @@ return this.show(), !0;
 },
 applyPosition: function(e) {
 var t = "";
-for (n in e) t += n + ":" + e[n] + (isNaN(e[n]) ? "; " : "px; ");
+for (var n in e) t += n + ":" + e[n] + (isNaN(e[n]) ? "; " : "px; ");
 this.addStyles(t);
 },
 getPageOffset: function(e) {
@@ -4285,7 +4739,7 @@ width: s
 },
 adjustPosition: function() {
 if (this.showing && this.hasNode()) {
-this.scrolling && !this.showOnTop ? this.getScroller().setMaxHeight(this.maxHeight + "px") : enyo.nop, this.removeClass("onyx-menu-up"), this.floating ? enyo.nop : this.applyPosition({
+this.scrolling && !this.showOnTop && this.getScroller().setMaxHeight(this.maxHeight + "px"), this.removeClass("onyx-menu-up"), this.floating || this.applyPosition({
 left: "auto"
 });
 var e = this.node.getBoundingClientRect(), t = e.height === undefined ? e.bottom - e.top : e.height, n = window.innerHeight === undefined ? document.documentElement.clientHeight : window.innerHeight, r = window.innerWidth === undefined ? document.documentElement.clientWidth : window.innerWidth;
@@ -4333,13 +4787,22 @@ enyo.kind({
 name: "onyx.MenuItem",
 kind: "enyo.Button",
 events: {
-onSelect: ""
+onSelect: "",
+onItemContentChange: ""
 },
 classes: "onyx-menu-item",
 tag: "div",
+create: function() {
+this.inherited(arguments), this.active && this.bubble("onActivate");
+},
 tap: function(e) {
 this.inherited(arguments), this.bubble("onRequestHideMenu"), this.doSelect({
 selected: this,
+content: this.content
+});
+},
+contentChanged: function(e) {
+this.inherited(arguments), this.doItemContentChange({
 content: this.content
 });
 }
@@ -4385,6 +4848,9 @@ selected: null
 events: {
 onChange: ""
 },
+handlers: {
+onItemContentChange: "itemContentChange"
+},
 floating: !0,
 showOnTop: !0,
 initComponents: function() {
@@ -4407,6 +4873,12 @@ e && e.removeClass("selected"), this.selected && (this.selected.addClass("select
 selected: this.selected,
 content: this.selected.content
 }));
+},
+itemContentChange: function(e, t) {
+t.originator == this.selected && this.doChange({
+selected: this.selected,
+content: this.selected.content
+});
 },
 resizeHandler: function() {
 this.inherited(arguments), this.adjustPosition();
@@ -4436,12 +4908,13 @@ strategyKind: "TouchScrollStrategy",
 components: [ {
 name: "flyweight",
 kind: "FlyweightRepeater",
+noSelect: !0,
 ontap: "itemTap"
 } ]
 } ],
 scrollerName: "scroller",
 initComponents: function() {
-this.controlParentName = "flyweight", this.inherited(arguments);
+this.controlParentName = "flyweight", this.inherited(arguments), this.$.flyweight.$.client.children[0].setActive(!0);
 },
 create: function() {
 this.inherited(arguments), this.countChanged();
@@ -4461,9 +4934,9 @@ this.item = e;
 },
 selectedChanged: function(e) {
 if (!this.item) return;
-e !== undefined && (this.item.removeClass("selected"), this.$.flyweight.renderRow(e)), this.item.addClass("selected"), this.$.flyweight.renderRow(this.selected), this.item.removeClass("selected");
-var t = this.$.flyweight.fetchRowNode(this.selected);
-this.doChange({
+e != null && (this.item.removeClass("selected"), this.$.flyweight.renderRow(e));
+var t;
+this.selected != null && (this.item.addClass("selected"), this.$.flyweight.renderRow(this.selected), this.item.removeClass("selected"), t = this.$.flyweight.fetchRowNode(this.selected)), this.doChange({
 selected: this.selected,
 content: t && t.textContent || this.item.content
 });
@@ -4512,7 +4985,7 @@ value: n,
 active: n == t.getMonth()
 });
 var i = t.getFullYear();
-this.$.yearPicker.setSelected(i - this.minYear), this.$.year.setContent(i);
+this.$.yearPicker.setSelected(i - this.minYear);
 for (n = 1; n <= this.monthLength(t.getYear(), t.getMonth()); n++) this.$.dayPicker.createComponent({
 content: n,
 value: n,
@@ -5035,7 +5508,8 @@ min: 0,
 max: 100,
 barClasses: "",
 showStripes: !0,
-animateStripes: !0
+animateStripes: !0,
+increment: 0
 },
 events: {
 onAnimateProgressFinish: ""
@@ -5065,6 +5539,9 @@ progressChanged: function() {
 this.progress = this.clampValue(this.min, this.max, this.progress);
 var e = this.calcPercent(this.progress);
 this.updateBarPosition(e);
+},
+calcIncrement: function(e) {
+return Math.round(e / this.increment) * this.increment;
 },
 clampValue: function(e, t, n) {
 return Math.max(e, Math.min(n, t));
@@ -5219,7 +5696,7 @@ name: "knob",
 classes: "onyx-slider-knob"
 } ],
 create: function() {
-this.inherited(arguments), this.createComponents(this.moreComponents), this.valueChanged();
+this.inherited(arguments), enyo.platform.firefoxOS && (this.moreComponents[2].ondown = "fxosDown", this.moreComponents[2].onenter = "fxosEnter", this.moreComponents[2].ondrag = "fxosDrag", this.moreComponents[2].onleave = "fxosLeave", this.moreComponents[2].onup = "fxosUp"), this.createComponents(this.moreComponents), this.valueChanged();
 },
 valueChanged: function() {
 this.value = this.clampValue(this.min, this.max, this.value);
@@ -5239,7 +5716,7 @@ if (t.horizontal) return t.preventDefault(), this.dragging = !0, !0;
 drag: function(e, t) {
 if (this.dragging) {
 var n = this.calcKnobPosition(t);
-return this.setValue(n), this.doChanging({
+return n = this.increment ? this.calcIncrement(n) : n, this.setValue(n), this.doChanging({
 value: this.value
 }), !0;
 }
@@ -5252,8 +5729,23 @@ value: this.value
 tap: function(e, t) {
 if (this.tappable) {
 var n = this.calcKnobPosition(t);
-return this.tapped = !0, this.animateTo(n), !0;
+return n = this.increment ? this.calcIncrement(n) : n, this.tapped = !0, this.animateTo(n), !0;
 }
+},
+fxosDown: function(e, t) {
+this.$.knob.addClass("pressed"), this._isInControl = !0;
+},
+fxosEnter: function(e, t) {
+this._isInControl = !0;
+},
+fxosDrag: function(e, t) {
+this.$.knob.addRemoveClass("pressed", this._isInControl);
+},
+fxosLeave: function(e, t) {
+this._isInControl = !1;
+},
+fxosUp: function(e, t) {
+this.$.knob.removeClass("pressed"), this._isInControl = !1;
 },
 animateTo: function(e) {
 this.$.animator.play({
@@ -5283,7 +5775,6 @@ rangeMin: 0,
 rangeMax: 100,
 rangeStart: 0,
 rangeEnd: 100,
-increment: 0,
 beginValue: 0,
 endValue: 0
 },
@@ -5357,9 +5848,6 @@ var e = this.calcKnobPercent(this.rangeStart), t = this.calcKnobPercent(this.ran
 this.$.bar.applyStyle("left", e + "%"), this.$.bar.applyStyle("width", t + "%");
 }
 },
-calcIncrement: function(e) {
-return Math.ceil(e / this.increment) * this.increment;
-},
 calcRangeRatio: function(e) {
 return e / 100 * (this.rangeMax - this.rangeMin) + this.rangeMin - this.increment / 2;
 },
@@ -5374,19 +5862,15 @@ if (t.horizontal) return t.preventDefault(), this.dragging = !0, !0;
 },
 drag: function(e, t) {
 if (this.dragging) {
-var n = this.calcKnobPosition(t);
+var n = this.calcKnobPosition(t), r, i, s;
 if (e.name === "startKnob" && n >= 0) {
-if (n <= this.endValue && t.xDirection === -1 || n <= this.endValue) {
-this.setBeginValue(n);
-var r = this.calcRangeRatio(this.beginValue), i = this.increment ? this.calcIncrement(r) : r, s = this.calcKnobPercent(i);
-this.updateKnobPosition(s, this.$.startKnob), this.setRangeStart(i), this.doChanging({
+if (!(n <= this.endValue && t.xDirection === -1 || n <= this.endValue)) return this.drag(this.$.endKnob, t);
+this.setBeginValue(n), r = this.calcRangeRatio(this.beginValue), i = this.increment ? this.calcIncrement(r + .5 * this.increment) : r, s = this.calcKnobPercent(i), this.updateKnobPosition(s, this.$.startKnob), this.setRangeStart(i), this.doChanging({
 value: i
 });
-}
-} else if (e.name === "endKnob" && n <= 100) if (n >= this.beginValue && t.xDirection === 1 || n >= this.beginValue) {
-this.setEndValue(n);
-var r = this.calcRangeRatio(this.endValue), i = this.increment ? this.calcIncrement(r) : r, s = this.calcKnobPercent(i);
-this.updateKnobPosition(s, this.$.endKnob), this.setRangeEnd(i), this.doChanging({
+} else if (e.name === "endKnob" && n <= 100) {
+if (!(n >= this.beginValue && t.xDirection === 1 || n >= this.beginValue)) return this.drag(this.$.startKnob, t);
+this.setEndValue(n), r = this.calcRangeRatio(this.endValue), i = this.increment ? this.calcIncrement(r + .5 * this.increment) : r, s = this.calcKnobPercent(i), this.updateKnobPosition(s, this.$.endKnob), this.setRangeEnd(i), this.doChanging({
 value: i
 });
 }
@@ -5395,20 +5879,14 @@ return !0;
 },
 dragfinish: function(e, t) {
 this.dragging = !1, t.preventTap();
-if (e.name === "startKnob") {
-var n = this.calcRangeRatio(this.beginValue);
-this.doChange({
+var n;
+return e.name === "startKnob" ? (n = this.calcRangeRatio(this.beginValue), this.doChange({
 value: n,
 startChanged: !0
-});
-} else if (e.name === "endKnob") {
-var n = this.calcRangeRatio(this.endValue);
-this.doChange({
+})) : e.name === "endKnob" && (n = this.calcRangeRatio(this.endValue), this.doChange({
 value: n,
 startChanged: !1
-});
-}
-return !0;
+})), !0;
 },
 rangeMinChanged: function() {
 this.refreshRangeSlider();
@@ -5450,27 +5928,18 @@ onhold: "hold",
 onrelease: "release"
 },
 hold: function(e, t) {
-this.tapHighlight && onyx.Item.addFlyweightClass(this.controlParent || this, "onyx-highlight", t);
+this.tapHighlight && onyx.Item.addRemoveFlyweightClass(this.controlParent || this, "onyx-highlight", !0, t);
 },
 release: function(e, t) {
-this.tapHighlight && onyx.Item.removeFlyweightClass(this.controlParent || this, "onyx-highlight", t);
+this.tapHighlight && onyx.Item.addRemoveFlyweightClass(this.controlParent || this, "onyx-highlight", !1, t);
 },
 statics: {
-addFlyweightClass: function(e, t, n, r) {
-var i = n.flyweight;
-if (i) {
-var s = r !== undefined ? r : n.index;
-i.performOnRow(s, function() {
-e.hasClass(t) ? e.setClassAttribute(e.getClassAttribute()) : e.addClass(t);
-}), e.removeClass(t);
-}
-},
-removeFlyweightClass: function(e, t, n, r) {
-var i = n.flyweight;
-if (i) {
-var s = r !== undefined ? r : n.index;
-i.performOnRow(s, function() {
-e.hasClass(t) ? e.removeClass(t) : e.setClassAttribute(e.getClassAttribute());
+addRemoveFlyweightClass: function(e, t, n, r, i) {
+var s = r.flyweight;
+if (s) {
+var o = i !== undefined ? i : r.index;
+s.performOnRow(o, function() {
+e.addRemoveClass(t, n);
 });
 }
 }
@@ -5592,6 +6061,491 @@ c.toolbarIndex === undefined && (c.toolbarIndex = t);
 }
 });
 
+// IntegerPicker.js
+
+enyo.kind({
+name: "onyx.IntegerPicker",
+kind: "onyx.Picker",
+published: {
+value: 0,
+min: 0,
+max: 9
+},
+create: function() {
+this.inherited(arguments), this.rangeChanged();
+},
+minChanged: function() {
+this.destroyClientControls(), this.rangeChanged(), this.render();
+},
+maxChanged: function() {
+this.destroyClientControls(), this.rangeChanged(), this.render();
+},
+rangeChanged: function() {
+for (var e = this.min; e <= this.max; e++) this.createComponent({
+content: e,
+active: e === this.value ? !0 : !1
+});
+},
+valueChanged: function(e) {
+var t = this.getClientControls(), n = t.length;
+this.value = this.value >= this.min && this.value <= this.max ? this.value : this.min;
+for (var r = 0; r < n; r++) if (this.value === parseInt(t[r].content)) {
+this.setSelected(t[r]);
+break;
+}
+},
+selectedChanged: function(e) {
+e && e.removeClass("selected"), this.selected && (this.selected.addClass("selected"), this.doChange({
+selected: this.selected,
+content: this.selected.content
+})), this.value = parseInt(this.selected.content);
+}
+});
+
+// ContextualPopup.js
+
+enyo.kind({
+name: "onyx.ContextualPopup",
+kind: "enyo.Popup",
+modal: !0,
+autoDismiss: !0,
+floating: !1,
+classes: "onyx-contextual-popup enyo-unselectable",
+published: {
+maxHeight: 100,
+scrolling: !0,
+title: undefined,
+actionButtons: []
+},
+vertFlushMargin: 60,
+horizFlushMargin: 50,
+widePopup: 200,
+longPopup: 200,
+horizBuffer: 16,
+events: {
+onTap: ""
+},
+handlers: {
+onRequestShowMenu: "requestShow",
+onRequestHideMenu: "requestHide"
+},
+components: [ {
+name: "title",
+classes: "onyx-contextual-popup-title"
+}, {
+classes: "onyx-contextual-popup-scroller",
+components: [ {
+name: "client",
+kind: "enyo.Scroller",
+vertical: "auto",
+classes: "enyo-unselectable",
+thumb: !1,
+strategyKind: "TouchScrollStrategy"
+} ]
+}, {
+name: "actionButtons",
+classes: "onyx-contextual-popup-action-buttons"
+} ],
+scrollerName: "client",
+create: function() {
+this.inherited(arguments), this.maxHeightChanged(), this.titleChanged(), this.actionButtonsChanged();
+},
+getScroller: function() {
+return this.$[this.scrollerName];
+},
+titleChanged: function() {
+this.$.title.setContent(this.title);
+},
+actionButtonsChanged: function() {
+for (var e = 0; e < this.actionButtons.length; e++) this.$.actionButtons.createComponent({
+kind: "onyx.Button",
+content: this.actionButtons[e].content,
+classes: this.actionButtons[e].classes + " onyx-contextual-popup-action-button",
+name: this.actionButtons[e].name ? this.actionButtons[e].name : "ActionButton" + e,
+index: e,
+tap: enyo.bind(this, this.tapHandler)
+});
+},
+tapHandler: function(e, t) {
+return t.actionButton = !0, t.popup = this, this.bubble("ontap", t), !0;
+},
+maxHeightChanged: function() {
+this.scrolling && this.getScroller().setMaxHeight(this.maxHeight + "px");
+},
+showingChanged: function() {
+this.inherited(arguments), this.scrolling && this.getScroller().setShowing(this.showing), this.adjustPosition();
+},
+requestShow: function(e, t) {
+var n = t.activator.hasNode();
+return n && (this.activatorOffset = this.getPageOffset(n)), this.show(), !0;
+},
+applyPosition: function(e) {
+var t = "";
+for (var n in e) t += n + ":" + e[n] + (isNaN(e[n]) ? "; " : "px; ");
+this.addStyles(t);
+},
+getPageOffset: function(e) {
+var t = this.getBoundingRect(e), n = window.pageYOffset === undefined ? document.documentElement.scrollTop : window.pageYOffset, r = window.pageXOffset === undefined ? document.documentElement.scrollLeft : window.pageXOffset, i = t.height === undefined ? t.bottom - t.top : t.height, s = t.width === undefined ? t.right - t.left : t.width;
+return {
+top: t.top + n,
+left: t.left + r,
+height: i,
+width: s
+};
+},
+adjustPosition: function() {
+if (this.showing && this.hasNode()) {
+this.resetPositioning();
+var e = this.getViewWidth(), t = this.getViewHeight(), n = this.vertFlushMargin, r = t - this.vertFlushMargin, i = this.horizFlushMargin, s = e - this.horizFlushMargin;
+if (this.activatorOffset.top + this.activatorOffset.height < n || this.activatorOffset.top > r) {
+if (this.applyVerticalFlushPositioning(i, s)) return;
+if (this.applyHorizontalFlushPositioning(i, s)) return;
+if (this.applyVerticalPositioning()) return;
+} else if (this.activatorOffset.left + this.activatorOffset.width < i || this.activatorOffset.left > s) if (this.applyHorizontalPositioning()) return;
+var o = this.getBoundingRect(this.node);
+if (o.width > this.widePopup) {
+if (this.applyVerticalPositioning()) return;
+} else if (o.height > this.longPopup && this.applyHorizontalPositioning()) return;
+if (this.applyVerticalPositioning()) return;
+if (this.applyHorizontalPositioning()) return;
+}
+},
+initVerticalPositioning: function() {
+this.resetPositioning(), this.addClass("vertical");
+var e = this.getBoundingRect(this.node), t = this.getViewHeight();
+return this.floating ? this.activatorOffset.top < t / 2 ? (this.applyPosition({
+top: this.activatorOffset.top + this.activatorOffset.height,
+bottom: "auto"
+}), this.addClass("below")) : (this.applyPosition({
+top: this.activatorOffset.top - e.height,
+bottom: "auto"
+}), this.addClass("above")) : e.top + e.height > t && t - e.bottom < e.top - e.height ? this.addClass("above") : this.addClass("below"), e = this.getBoundingRect(this.node), e.top + e.height > t || e.top < 0 ? !1 : !0;
+},
+applyVerticalPositioning: function() {
+if (!this.initVerticalPositioning()) return !1;
+var e = this.getBoundingRect(this.node), t = this.getViewWidth();
+if (this.floating) {
+var n = this.activatorOffset.left + this.activatorOffset.width / 2 - e.width / 2;
+n + e.width > t ? (this.applyPosition({
+left: this.activatorOffset.left + this.activatorOffset.width - e.width
+}), this.addClass("left")) : n < 0 ? (this.applyPosition({
+left: this.activatorOffset.left
+}), this.addClass("right")) : this.applyPosition({
+left: n
+});
+} else {
+var r = this.activatorOffset.left + this.activatorOffset.width / 2 - e.left - e.width / 2;
+e.right + r > t ? (this.applyPosition({
+left: this.activatorOffset.left + this.activatorOffset.width - e.right
+}), this.addRemoveClass("left", !0)) : e.left + r < 0 ? this.addRemoveClass("right", !0) : this.applyPosition({
+left: r
+});
+}
+return !0;
+},
+applyVerticalFlushPositioning: function(e, t) {
+if (!this.initVerticalPositioning()) return !1;
+var n = this.getBoundingRect(this.node), r = this.getViewWidth();
+return this.activatorOffset.left + this.activatorOffset.width / 2 < e ? (this.activatorOffset.left + this.activatorOffset.width / 2 < this.horizBuffer ? this.applyPosition({
+left: this.horizBuffer + (this.floating ? 0 : -n.left)
+}) : this.applyPosition({
+left: this.activatorOffset.width / 2 + (this.floating ? this.activatorOffset.left : 0)
+}), this.addClass("right"), this.addClass("corner"), !0) : this.activatorOffset.left + this.activatorOffset.width / 2 > t ? (this.activatorOffset.left + this.activatorOffset.width / 2 > r - this.horizBuffer ? this.applyPosition({
+left: r - this.horizBuffer - n.right
+}) : this.applyPosition({
+left: this.activatorOffset.left + this.activatorOffset.width / 2 - n.right
+}), this.addClass("left"), this.addClass("corner"), !0) : !1;
+},
+initHorizontalPositioning: function() {
+this.resetPositioning();
+var e = this.getBoundingRect(this.node), t = this.getViewWidth();
+return this.floating ? this.activatorOffset.left + this.activatorOffset.width < t / 2 ? (this.applyPosition({
+left: this.activatorOffset.left + this.activatorOffset.width
+}), this.addRemoveClass("left", !0)) : (this.applyPosition({
+left: this.activatorOffset.left - e.width
+}), this.addRemoveClass("right", !0)) : this.activatorOffset.left - e.width > 0 ? (this.applyPosition({
+left: this.activatorOffset.left - e.left - e.width
+}), this.addRemoveClass("right", !0)) : (this.applyPosition({
+left: this.activatorOffset.width
+}), this.addRemoveClass("left", !0)), this.addRemoveClass("horizontal", !0), e = this.getBoundingRect(this.node), e.left < 0 || e.left + e.width > t ? !1 : !0;
+},
+applyHorizontalPositioning: function() {
+if (!this.initHorizontalPositioning()) return !1;
+var e = this.getBoundingRect(this.node), t = this.getViewHeight(), n = this.activatorOffset.top + this.activatorOffset.height / 2;
+return this.floating ? n >= t / 2 - .05 * t && n <= t / 2 + .05 * t ? this.applyPosition({
+top: this.activatorOffset.top + this.activatorOffset.height / 2 - e.height / 2,
+bottom: "auto"
+}) : this.activatorOffset.top + this.activatorOffset.height < t / 2 ? (this.applyPosition({
+top: this.activatorOffset.top - this.activatorOffset.height,
+bottom: "auto"
+}), this.addRemoveClass("high", !0)) : (this.applyPosition({
+top: this.activatorOffset.top - e.height + this.activatorOffset.height * 2,
+bottom: "auto"
+}), this.addRemoveClass("low", !0)) : n >= t / 2 - .05 * t && n <= t / 2 + .05 * t ? this.applyPosition({
+top: (this.activatorOffset.height - e.height) / 2
+}) : this.activatorOffset.top + this.activatorOffset.height < t / 2 ? (this.applyPosition({
+top: -this.activatorOffset.height
+}), this.addRemoveClass("high", !0)) : (this.applyPosition({
+top: e.top - e.height - this.activatorOffset.top + this.activatorOffset.height
+}), this.addRemoveClass("low", !0)), !0;
+},
+applyHorizontalFlushPositioning: function(e, t) {
+if (!this.initHorizontalPositioning()) return !1;
+var n = this.getBoundingRect(this.node), r = this.getViewWidth();
+return this.floating ? this.activatorOffset.top < innerHeight / 2 ? (this.applyPosition({
+top: this.activatorOffset.top + this.activatorOffset.height / 2
+}), this.addRemoveClass("high", !0)) : (this.applyPosition({
+top: this.activatorOffset.top + this.activatorOffset.height / 2 - n.height
+}), this.addRemoveClass("low", !0)) : n.top + n.height > innerHeight && innerHeight - n.bottom < n.top - n.height ? (this.applyPosition({
+top: n.top - n.height - this.activatorOffset.top - this.activatorOffset.height / 2
+}), this.addRemoveClass("low", !0)) : (this.applyPosition({
+top: this.activatorOffset.height / 2
+}), this.addRemoveClass("high", !0)), this.activatorOffset.left + this.activatorOffset.width < e ? (this.addClass("left"), this.addClass("corner"), !0) : this.activatorOffset.left > t ? (this.addClass("right"), this.addClass("corner"), !0) : !1;
+},
+getBoundingRect: function(e) {
+var t = e.getBoundingClientRect();
+return !t.width || !t.height ? {
+left: t.left,
+right: t.right,
+top: t.top,
+bottom: t.bottom,
+width: t.right - t.left,
+height: t.bottom - t.top
+} : t;
+},
+getViewHeight: function() {
+return window.innerHeight === undefined ? document.documentElement.clientHeight : window.innerHeight;
+},
+getViewWidth: function() {
+return window.innerWidth === undefined ? document.documentElement.clientWidth : window.innerWidth;
+},
+resetPositioning: function() {
+this.removeClass("right"), this.removeClass("left"), this.removeClass("high"), this.removeClass("low"), this.removeClass("corner"), this.removeClass("below"), this.removeClass("above"), this.removeClass("vertical"), this.removeClass("horizontal"), this.applyPosition({
+left: "auto"
+}), this.applyPosition({
+top: "auto"
+});
+},
+resizeHandler: function() {
+this.inherited(arguments), this.adjustPosition();
+},
+requestHide: function() {
+this.setShowing(!1);
+}
+});
+
+// ContextualLayout.js
+
+enyo.kind({
+name: "enyo.ContextualLayout",
+kind: "Layout",
+adjustPosition: function() {
+if (this.container.showing && this.container.hasNode()) {
+this.resetPositioning();
+var e = this.getViewWidth(), t = this.getViewHeight(), n = this.container.vertFlushMargin, r = t - this.container.vertFlushMargin, i = this.container.horizFlushMargin, s = e - this.container.horizFlushMargin;
+if (this.offset.top + this.offset.height < n || this.offset.top > r) {
+if (this.applyVerticalFlushPositioning(i, s)) return;
+if (this.applyHorizontalFlushPositioning(i, s)) return;
+if (this.applyVerticalPositioning()) return;
+} else if (this.offset.left + this.offset.width < i || this.offset.left > s) if (this.applyHorizontalPositioning()) return;
+var o = this.getBoundingRect(this.container.node);
+if (o.width > this.container.widePopup) {
+if (this.applyVerticalPositioning()) return;
+} else if (o.height > this.container.longPopup && this.applyHorizontalPositioning()) return;
+if (this.applyVerticalPositioning()) return;
+if (this.applyHorizontalPositioning()) return;
+}
+},
+initVerticalPositioning: function() {
+this.resetPositioning(), this.container.addClass("vertical");
+var e = this.getBoundingRect(this.container.node), t = this.getViewHeight();
+return this.container.floating ? this.offset.top < t / 2 ? (this.applyPosition({
+top: this.offset.top + this.offset.height,
+bottom: "auto"
+}), this.container.addClass("below")) : (this.applyPosition({
+top: this.offset.top - e.height,
+bottom: "auto"
+}), this.container.addClass("above")) : e.top + e.height > t && t - e.bottom < e.top - e.height ? this.container.addClass("above") : this.container.addClass("below"), e = this.getBoundingRect(this.container.node), e.top + e.height > t || e.top < 0 ? !1 : !0;
+},
+applyVerticalPositioning: function() {
+if (!this.initVerticalPositioning()) return !1;
+var e = this.getBoundingRect(this.container.node), t = this.getViewWidth();
+if (this.container.floating) {
+var n = this.offset.left + this.offset.width / 2 - e.width / 2;
+n + e.width > t ? (this.applyPosition({
+left: this.offset.left + this.offset.width - e.width
+}), this.container.addClass("left")) : n < 0 ? (this.applyPosition({
+left: this.offset.left
+}), this.container.addClass("right")) : this.applyPosition({
+left: n
+});
+} else {
+var r = this.offset.left + this.offset.width / 2 - e.left - e.width / 2;
+e.right + r > t ? (this.applyPosition({
+left: this.offset.left + this.offset.width - e.right
+}), this.container.addRemoveClass("left", !0)) : e.left + r < 0 ? this.container.addRemoveClass("right", !0) : this.applyPosition({
+left: r
+});
+}
+return !0;
+},
+applyVerticalFlushPositioning: function(e, t) {
+if (!this.initVerticalPositioning()) return !1;
+var n = this.getBoundingRect(this.container.node), r = this.getViewWidth();
+return this.offset.left + this.offset.width / 2 < e ? (this.offset.left + this.offset.width / 2 < this.container.horizBuffer ? this.applyPosition({
+left: this.container.horizBuffer + (this.container.floating ? 0 : -n.left)
+}) : this.applyPosition({
+left: this.offset.width / 2 + (this.container.floating ? this.offset.left : 0)
+}), this.container.addClass("right"), this.container.addClass("corner"), !0) : this.offset.left + this.offset.width / 2 > t ? (this.offset.left + this.offset.width / 2 > r - this.container.horizBuffer ? this.applyPosition({
+left: r - this.container.horizBuffer - n.right
+}) : this.applyPosition({
+left: this.offset.left + this.offset.width / 2 - n.right
+}), this.container.addClass("left"), this.container.addClass("corner"), !0) : !1;
+},
+initHorizontalPositioning: function() {
+this.resetPositioning();
+var e = this.getBoundingRect(this.container.node), t = this.getViewWidth();
+return this.container.floating ? this.offset.left + this.offset.width < t / 2 ? (this.applyPosition({
+left: this.offset.left + this.offset.width
+}), this.container.addRemoveClass("left", !0)) : (this.applyPosition({
+left: this.offset.left - e.width
+}), this.container.addRemoveClass("right", !0)) : this.offset.left - e.width > 0 ? (this.applyPosition({
+left: this.offset.left - e.left - e.width
+}), this.container.addRemoveClass("right", !0)) : (this.applyPosition({
+left: this.offset.width
+}), this.container.addRemoveClass("left", !0)), this.container.addRemoveClass("horizontal", !0), e = this.getBoundingRect(this.container.node), e.left < 0 || e.left + e.width > t ? !1 : !0;
+},
+applyHorizontalPositioning: function() {
+if (!this.initHorizontalPositioning()) return !1;
+var e = this.getBoundingRect(this.container.node), t = this.getViewHeight(), n = this.offset.top + this.offset.height / 2;
+return this.container.floating ? n >= t / 2 - .05 * t && n <= t / 2 + .05 * t ? this.applyPosition({
+top: this.offset.top + this.offset.height / 2 - e.height / 2,
+bottom: "auto"
+}) : this.offset.top + this.offset.height < t / 2 ? (this.applyPosition({
+top: this.offset.top - this.offset.height,
+bottom: "auto"
+}), this.container.addRemoveClass("high", !0)) : (this.applyPosition({
+top: this.offset.top - e.height + this.offset.height * 2,
+bottom: "auto"
+}), this.container.addRemoveClass("low", !0)) : n >= t / 2 - .05 * t && n <= t / 2 + .05 * t ? this.applyPosition({
+top: (this.offset.height - e.height) / 2
+}) : this.offset.top + this.offset.height < t / 2 ? (this.applyPosition({
+top: -this.offset.height
+}), this.container.addRemoveClass("high", !0)) : (this.applyPosition({
+top: e.top - e.height - this.offset.top + this.offset.height
+}), this.container.addRemoveClass("low", !0)), !0;
+},
+applyHorizontalFlushPositioning: function(e, t) {
+if (!this.initHorizontalPositioning()) return !1;
+var n = this.getBoundingRect(this.container.node), r = this.getViewHeight();
+return this.container.floating ? this.offset.top < r / 2 ? (this.applyPosition({
+top: this.offset.top + this.offset.height / 2
+}), this.container.addRemoveClass("high", !0)) : (this.applyPosition({
+top: this.offset.top + this.offset.height / 2 - n.height
+}), this.container.addRemoveClass("low", !0)) : n.top + n.height > r && r - n.bottom < n.top - n.height ? (this.applyPosition({
+top: n.top - n.height - this.offset.top - this.offset.height / 2
+}), this.container.addRemoveClass("low", !0)) : (this.applyPosition({
+top: this.offset.height / 2
+}), this.container.addRemoveClass("high", !0)), this.offset.left + this.offset.width < e ? (this.container.addClass("left"), this.container.addClass("corner"), !0) : this.offset.left > t ? (this.container.addClass("right"), this.container.addClass("corner"), !0) : !1;
+},
+getBoundingRect: function(e) {
+var t = e.getBoundingClientRect();
+return !t.width || !t.height ? {
+left: t.left,
+right: t.right,
+top: t.top,
+bottom: t.bottom,
+width: t.right - t.left,
+height: t.bottom - t.top
+} : t;
+},
+getViewHeight: function() {
+return window.innerHeight === undefined ? document.documentElement.clientHeight : window.innerHeight;
+},
+getViewWidth: function() {
+return window.innerWidth === undefined ? document.documentElement.clientWidth : window.innerWidth;
+},
+applyPosition: function(e) {
+var t = "";
+for (n in e) t += n + ":" + e[n] + (isNaN(e[n]) ? "; " : "px; ");
+this.container.addStyles(t);
+},
+resetPositioning: function() {
+this.container.removeClass("right"), this.container.removeClass("left"), this.container.removeClass("high"), this.container.removeClass("low"), this.container.removeClass("corner"), this.container.removeClass("below"), this.container.removeClass("above"), this.container.removeClass("vertical"), this.container.removeClass("horizontal"), this.applyPosition({
+left: "auto"
+}), this.applyPosition({
+top: "auto"
+});
+},
+reflow: function() {
+this.offset = this.container.activatorOffset, this.adjustPosition();
+}
+});
+
+// Drawer.js
+
+enyo.kind({
+name: "enyo.Drawer",
+published: {
+open: !0,
+orient: "v",
+animated: !0
+},
+style: "overflow: hidden; position: relative;",
+tools: [ {
+kind: "Animator",
+onStep: "animatorStep",
+onEnd: "animatorEnd"
+}, {
+name: "client",
+style: "position: relative;",
+classes: "enyo-border-box"
+} ],
+create: function() {
+this.inherited(arguments), this.animatedChanged(), this.openChanged();
+},
+initComponents: function() {
+this.createChrome(this.tools), this.inherited(arguments);
+},
+animatedChanged: function() {
+!this.animated && this.hasNode() && this.$.animator.isAnimating() && (this.$.animator.stop(), this.animatorEnd());
+},
+openChanged: function() {
+this.$.client.show();
+if (this.hasNode()) if (this.$.animator.isAnimating()) this.$.animator.reverse(); else {
+var e = this.orient == "v", t = e ? "height" : "width", n = e ? "top" : "left";
+this.applyStyle(t, null);
+var r = this.hasNode()[e ? "scrollHeight" : "scrollWidth"];
+this.animated ? this.$.animator.play({
+startValue: this.open ? 0 : r,
+endValue: this.open ? r : 0,
+dimension: t,
+position: n
+}) : this.animatorEnd();
+} else this.$.client.setShowing(this.open);
+},
+animatorStep: function(e) {
+if (this.hasNode()) {
+var t = e.dimension;
+this.node.style[t] = this.domStyles[t] = e.value + "px";
+}
+var n = this.$.client.hasNode();
+if (n) {
+var r = e.position, i = this.open ? e.endValue : e.startValue;
+n.style[r] = this.$.client.domStyles[r] = e.value - i + "px";
+}
+this.container && this.container.resized();
+},
+animatorEnd: function() {
+if (!this.open) this.$.client.hide(); else {
+this.$.client.domCssText = enyo.Control.domStylesToCssText(this.$.client.domStyles);
+var e = this.orient == "v", t = e ? "height" : "width", n = e ? "top" : "left", r = this.$.client.hasNode();
+r && (r.style[n] = this.$.client.domStyles[n] = null), this.node && (this.node.style[t] = this.domStyles[t] = null);
+}
+this.container && this.container.resized();
+}
+});
+
 // FittableLayout.js
 
 enyo.kind({
@@ -5669,10 +6623,13 @@ noSelect: !1,
 multiSelect: !1,
 toggleSelected: !1,
 clientClasses: "",
-clientStyle: ""
+clientStyle: "",
+rowOffset: 0,
+orient: "v"
 },
 events: {
-onSetupItem: ""
+onSetupItem: "",
+onRenderRow: ""
 },
 bottomUp: !1,
 components: [ {
@@ -5682,7 +6639,6 @@ onDeselect: "selectDeselect"
 }, {
 name: "client"
 } ],
-rowOffset: 0,
 create: function() {
 this.inherited(arguments), this.noSelectChanged(), this.multiSelectChanged(), this.clientClassesChanged(), this.clientStyleChanged();
 },
@@ -5707,7 +6663,7 @@ selected: this.isSelected(e)
 generateChildHtml: function() {
 var e = "";
 this.index = null;
-for (var t = 0, n = 0; t < this.count; t++) n = this.rowOffset + (this.bottomUp ? this.count - t - 1 : t), this.setupItem(n), this.$.client.setAttribute("data-enyo-index", n), e += this.inherited(arguments), this.$.client.teardownRender();
+for (var t = 0, n = 0; t < this.count; t++) n = this.rowOffset + (this.bottomUp ? this.count - t - 1 : t), this.setupItem(n), this.$.client.setAttribute("data-enyo-index", n), this.orient == "h" && this.$.client.setStyle("display:inline-block;"), e += this.inherited(arguments), this.$.client.teardownRender();
 return e;
 },
 previewDomEvent: function(e) {
@@ -5719,7 +6675,7 @@ var r = t && t.index != null ? t.index : this.index;
 t && r != null && (t.index = r, t.flyweight = this), this.inherited(arguments);
 },
 tap: function(e, t) {
-if (this.noSelect) return;
+if (this.noSelect || t.index === -1) return;
 this.toggleSelected ? this.$.selection.toggle(t.index) : this.$.selection.select(t.index);
 },
 selectDeselect: function(e, t) {
@@ -5732,25 +6688,29 @@ isSelected: function(e) {
 return this.getSelection().isSelected(e);
 },
 renderRow: function(e) {
+if (e < this.rowOffset || e >= this.count + this.rowOffset) return;
+this.setupItem(e);
 var t = this.fetchRowNode(e);
-t && (this.setupItem(e), t.innerHTML = this.$.client.generateChildHtml(), this.$.client.teardownChildren());
+t && (enyo.dom.setInnerHtml(t, this.$.client.generateChildHtml()), this.$.client.teardownChildren(), this.doRenderRow({
+rowIndex: e
+}));
 },
 fetchRowNode: function(e) {
-if (this.hasNode()) {
-var t = this.node.querySelectorAll('[data-enyo-index="' + e + '"]');
-return t && t[0];
-}
+if (this.hasNode()) return this.node.querySelector('[data-enyo-index="' + e + '"]');
 },
 rowForEvent: function(e) {
-var t = e.target, n = this.hasNode().id;
-while (t && t.parentNode && t.id != n) {
-var r = t.getAttribute && t.getAttribute("data-enyo-index");
-if (r !== null) return Number(r);
+if (!this.hasNode()) return -1;
+var t = e.target;
+while (t && t !== this.node) {
+var n = t.getAttribute && t.getAttribute("data-enyo-index");
+if (n !== null) return Number(n);
 t = t.parentNode;
 }
 return -1;
 },
 prepareRow: function(e) {
+if (e < this.rowOffset || e >= this.count + this.rowOffset) return;
+this.setupItem(e);
 var t = this.fetchRowNode(e);
 enyo.FlyweightRepeater.claimNode(this.$.client, t);
 },
@@ -5758,12 +6718,13 @@ lockRow: function() {
 this.$.client.teardownChildren();
 },
 performOnRow: function(e, t, n) {
+if (e < this.rowOffset || e >= this.count + this.rowOffset) return;
 t && (this.prepareRow(e), enyo.call(n || null, t), this.lockRow());
 },
 statics: {
 claimNode: function(e, t) {
-var n = t && t.querySelectorAll("#" + e.id);
-n = n && n[0], e.generated = Boolean(n || !e.tag), e.node = n, e.node && e.rendered();
+var n;
+t && (t.id !== e.id ? n = t.querySelector("#" + e.id) : n = t), e.generated = Boolean(n || !e.tag), e.node = n, e.node && e.rendered();
 for (var r = 0, i = e.children, s; s = i[r]; r++) this.claimNode(s, t);
 }
 }
@@ -5778,19 +6739,41 @@ classes: "enyo-list",
 published: {
 count: 0,
 rowsPerPage: 50,
+orient: "v",
 bottomUp: !1,
 noSelect: !1,
 multiSelect: !1,
 toggleSelected: !1,
-fixedHeight: !1
+fixedSize: !1,
+reorderable: !1,
+centerReorderContainer: !0,
+reorderComponents: [],
+pinnedReorderComponents: [],
+swipeableComponents: [],
+enableSwipe: !1,
+persistSwipeableItem: !1
 },
 events: {
-onSetupItem: ""
+onSetupItem: "",
+onSetupReorderComponents: "",
+onSetupPinnedReorderComponents: "",
+onReorder: "",
+onSetupSwipeItem: "",
+onSwipeDrag: "",
+onSwipe: "",
+onSwipeComplete: ""
 },
 handlers: {
-onAnimateFinish: "animateFinish"
+onAnimateFinish: "animateFinish",
+onRenderRow: "rowRendered",
+ondragstart: "dragstart",
+ondrag: "drag",
+ondragfinish: "dragfinish",
+onup: "up",
+onholdpulse: "holdpulse",
+onflick: "flick"
 },
-rowHeight: 0,
+rowSize: 0,
 listTools: [ {
 name: "port",
 classes: "enyo-list-port enyo-border-box",
@@ -5803,6 +6786,10 @@ tag: null,
 name: "client"
 } ]
 }, {
+name: "holdingarea",
+allowHtml: !0,
+classes: "enyo-list-holdingarea"
+}, {
 name: "page0",
 allowHtml: !0,
 classes: "enyo-list-page"
@@ -5810,13 +6797,68 @@ classes: "enyo-list-page"
 name: "page1",
 allowHtml: !0,
 classes: "enyo-list-page"
+}, {
+name: "placeholder",
+classes: "enyo-list-placeholder"
+}, {
+name: "swipeableComponents",
+style: "position:absolute; display:block; top:-1000px; left:0;"
 } ]
 } ],
+reorderHoldTimeMS: 600,
+draggingRowIndex: -1,
+initHoldCounter: 3,
+holdCounter: 3,
+holding: !1,
+draggingRowNode: null,
+placeholderRowIndex: -1,
+dragToScrollThreshold: .1,
+prevScrollTop: 0,
+autoScrollTimeoutMS: 20,
+autoScrollTimeout: null,
+autoscrollPageY: 0,
+pinnedReorderMode: !1,
+initialPinPosition: -1,
+itemMoved: !1,
+currentPageNumber: -1,
+completeReorderTimeout: null,
+swipeIndex: null,
+swipeDirection: null,
+persistentItemVisible: !1,
+persistentItemOrigin: null,
+swipeComplete: !1,
+completeSwipeTimeout: null,
+completeSwipeDelayMS: 500,
+normalSwipeSpeedMS: 200,
+fastSwipeSpeedMS: 100,
+percentageDraggedThreshold: .2,
+importProps: function(e) {
+e && e.reorderable && (this.touch = !0), this.inherited(arguments);
+},
 create: function() {
-this.pageHeights = [], this.inherited(arguments), this.getStrategy().translateOptimized = !0, this.bottomUpChanged(), this.noSelectChanged(), this.multiSelectChanged(), this.toggleSelectedChanged();
+this.pageSizes = [], this.orientV = this.orient == "v", this.vertical = this.orientV ? "default" : "hidden", this.inherited(arguments), this.$.generator.orient = this.orient, this.getStrategy().translateOptimized = !0, this.pageBound = this.orientV ? "top" : "left", this.$.port.addRemoveClass("horizontal", !this.orientV), this.$.page0.addRemoveClass("vertical", this.orientV), this.$.page1.addRemoveClass("vertical", this.orientV), this.bottomUpChanged(), this.noSelectChanged(), this.multiSelectChanged(), this.toggleSelectedChanged(), this.$.generator.setRowOffset(0), this.$.generator.setCount(this.count);
+},
+initComponents: function() {
+this.createReorderTools(), this.inherited(arguments), this.createSwipeableComponents();
+},
+createReorderTools: function() {
+this.createComponent({
+name: "reorderContainer",
+classes: "enyo-list-reorder-container",
+ondown: "sendToStrategy",
+ondrag: "sendToStrategy",
+ondragstart: "sendToStrategy",
+ondragfinish: "sendToStrategy",
+onflick: "sendToStrategy"
+});
 },
 createStrategy: function() {
 this.controlParentName = "strategy", this.inherited(arguments), this.createChrome(this.listTools), this.controlParentName = "client", this.discoverControlParent();
+},
+createSwipeableComponents: function() {
+for (var e = 0; e < this.swipeableComponents.length; e++) this.$.swipeableComponents.createComponent(this.swipeableComponents[e], {
+owner: this.owner
+});
 },
 rendered: function() {
 this.inherited(arguments), this.$.generator.node = this.$.port.hasNode(), this.$.generator.generated = !0, this.reset();
@@ -5825,7 +6867,7 @@ resizeHandler: function() {
 this.inherited(arguments), this.refresh();
 },
 bottomUpChanged: function() {
-this.$.generator.bottomUp = this.bottomUp, this.$.page0.applyStyle(this.pageBound, null), this.$.page1.applyStyle(this.pageBound, null), this.pageBound = this.bottomUp ? "bottom" : "top", this.hasNode() && this.reset();
+this.$.generator.bottomUp = this.bottomUp, this.$.page0.applyStyle(this.pageBound, null), this.$.page1.applyStyle(this.pageBound, null), this.pageBound = this.orientV ? this.bottomUp ? "bottom" : "top" : this.bottomUp ? "right" : "left", !this.orientV && this.bottomUp && (this.$.page0.applyStyle("left", "auto"), this.$.page1.applyStyle("left", "auto")), this.hasNode() && this.reset();
 },
 noSelectChanged: function() {
 this.$.generator.setNoSelect(this.noSelect);
@@ -5839,40 +6881,86 @@ this.$.generator.setToggleSelected(this.toggleSelected);
 countChanged: function() {
 this.hasNode() && this.updateMetrics();
 },
+sendToStrategy: function(e, t) {
+this.$.strategy.dispatchEvent("on" + t.type, t, e);
+},
 updateMetrics: function() {
-this.defaultPageHeight = this.rowsPerPage * (this.rowHeight || 100), this.pageCount = Math.ceil(this.count / this.rowsPerPage), this.portSize = 0;
-for (var e = 0; e < this.pageCount; e++) this.portSize += this.getPageHeight(e);
+this.defaultPageSize = this.rowsPerPage * (this.rowSize || 100), this.pageCount = Math.ceil(this.count / this.rowsPerPage), this.portSize = 0;
+for (var e = 0; e < this.pageCount; e++) this.portSize += this.getPageSize(e);
 this.adjustPortSize();
+},
+holdpulse: function(e, t) {
+if (!this.getReorderable() || this.isReordering()) return;
+if (t.holdTime >= this.reorderHoldTimeMS && this.shouldStartReordering(e, t)) return t.preventDefault(), this.startReordering(t), !1;
+},
+dragstart: function(e, t) {
+if (this.isReordering()) return !0;
+if (this.isSwipeable()) return this.swipeDragStart(e, t);
+},
+drag: function(e, t) {
+if (this.shouldDoReorderDrag(t)) return t.preventDefault(), this.reorderDrag(t), !0;
+if (this.isSwipeable()) return t.preventDefault(), this.swipeDrag(e, t), !0;
+},
+dragfinish: function(e, t) {
+this.isReordering() ? this.finishReordering(e, t) : this.isSwipeable() && this.swipeDragFinish(e, t);
+},
+up: function(e, t) {
+this.isReordering() && this.finishReordering(e, t);
 },
 generatePage: function(e, t) {
 this.page = e;
-var n = this.$.generator.rowOffset = this.rowsPerPage * this.page, r = this.$.generator.count = Math.min(this.count - n, this.rowsPerPage), i = this.$.generator.generateChildHtml();
-t.setContent(i);
-var s = t.getBounds().height;
-!this.rowHeight && s > 0 && (this.rowHeight = Math.floor(s / r), this.updateMetrics());
-if (!this.fixedHeight) {
-var o = this.getPageHeight(e);
-o != s && s > 0 && (this.pageHeights[e] = s, this.portSize += s - o);
+var n = this.rowsPerPage * this.page;
+this.$.generator.setRowOffset(n);
+var r = Math.min(this.count - n, this.rowsPerPage);
+this.$.generator.setCount(r);
+var i = this.$.generator.generateChildHtml();
+t.setContent(i), this.getReorderable() && this.draggingRowIndex > -1 && this.hideReorderingRow();
+var s = t.getBounds(), o = this.orientV ? s.height : s.width;
+!this.rowSize && o > 0 && (this.rowSize = Math.floor(o / r), this.updateMetrics());
+if (!this.fixedSize) {
+var u = this.getPageSize(e);
+u != o && o > 0 && (this.pageSizes[e] = o, this.portSize += o - u);
 }
 },
+pageForRow: function(e) {
+return Math.floor(e / this.rowsPerPage);
+},
+preserveDraggingRowNode: function(e) {
+this.draggingRowNode && this.pageForRow(this.draggingRowIndex) === e && (this.$.holdingarea.hasNode().appendChild(this.draggingRowNode), this.draggingRowNode = null, this.removedInitialPage = !0);
+},
 update: function(e) {
-var t = !1, n = this.positionToPageInfo(e), r = n.pos + this.scrollerHeight / 2, i = Math.floor(r / Math.max(n.height, this.scrollerHeight) + .5) + n.no, s = i % 2 === 0 ? i : i - 1;
-this.p0 != s && this.isPageInRange(s) && (this.generatePage(s, this.$.page0), this.positionPage(s, this.$.page0), this.p0 = s, t = !0), s = i % 2 === 0 ? Math.max(1, i - 1) : i, this.p1 != s && this.isPageInRange(s) && (this.generatePage(s, this.$.page1), this.positionPage(s, this.$.page1), this.p1 = s, t = !0), t && !this.fixedHeight && (this.adjustBottomPage(), this.adjustPortSize());
+var t = !1, n = this.positionToPageInfo(e), r = n.pos + this.scrollerSize / 2, i = Math.floor(r / Math.max(n.size, this.scrollerSize) + .5) + n.no, s = i % 2 === 0 ? i : i - 1;
+this.p0 != s && this.isPageInRange(s) && (this.preserveDraggingRowNode(this.p0), this.generatePage(s, this.$.page0), this.positionPage(s, this.$.page0), this.p0 = s, t = !0, this.p0RowBounds = this.getPageRowSizes(this.$.page0)), s = i % 2 === 0 ? Math.max(1, i - 1) : i, this.p1 != s && this.isPageInRange(s) && (this.preserveDraggingRowNode(this.p1), this.generatePage(s, this.$.page1), this.positionPage(s, this.$.page1), this.p1 = s, t = !0, this.p1RowBounds = this.getPageRowSizes(this.$.page1)), t && (this.$.generator.setRowOffset(0), this.$.generator.setCount(this.count), this.fixedSize || (this.adjustBottomPage(), this.adjustPortSize()));
+},
+getPageRowSizes: function(e) {
+var t = {}, n = e.hasNode().querySelectorAll("div[data-enyo-index]");
+for (var r = 0, i, s; r < n.length; r++) i = n[r].getAttribute("data-enyo-index"), i !== null && (s = enyo.dom.getBounds(n[r]), t[parseInt(i, 10)] = {
+height: s.height,
+width: s.width
+});
+return t;
+},
+updateRowBounds: function(e) {
+this.p0RowBounds[e] ? this.updateRowBoundsAtIndex(e, this.p0RowBounds, this.$.page0) : this.p1RowBounds[e] && this.updateRowBoundsAtIndex(e, this.p1RowBounds, this.$.page1);
+},
+updateRowBoundsAtIndex: function(e, t, n) {
+var r = n.hasNode().querySelector('div[data-enyo-index="' + e + '"]'), i = enyo.dom.getBounds(r);
+t[e].height = i.height, t[e].width = i.width;
 },
 updateForPosition: function(e) {
 this.update(this.calcPos(e));
 },
 calcPos: function(e) {
-return this.bottomUp ? this.portSize - this.scrollerHeight - e : e;
+return this.bottomUp ? this.portSize - this.scrollerSize - e : e;
 },
 adjustBottomPage: function() {
 var e = this.p0 >= this.p1 ? this.$.page0 : this.$.page1;
 this.positionPage(e.pageNo, e);
 },
 adjustPortSize: function() {
-this.scrollerHeight = this.getBounds().height;
-var e = Math.max(this.scrollerHeight, this.portSize);
-this.$.port.applyStyle("height", e + "px");
+this.scrollerSize = this.orientV ? this.getBounds().height : this.getBounds().width;
+var e = Math.max(this.scrollerSize, this.portSize);
+this.$.port.applyStyle(this.orientV ? "height" : "width", e + "px"), this.orientV || this.$.port.applyStyle("height", this.getBounds().height + "px");
 },
 positionPage: function(e, t) {
 t.pageNo = e;
@@ -5881,67 +6969,74 @@ t.applyStyle(this.pageBound, n + "px");
 },
 pageToPosition: function(e) {
 var t = 0, n = e;
-while (n > 0) n--, t += this.getPageHeight(n);
+while (n > 0) n--, t += this.getPageSize(n);
 return t;
 },
 positionToPageInfo: function(e) {
-var t = -1, n = this.calcPos(e), r = this.defaultPageHeight;
-while (n >= 0) t++, r = this.getPageHeight(t), n -= r;
-return {
+var t = -1, n = this.calcPos(e), r = this.defaultPageSize;
+while (n >= 0) t++, r = this.getPageSize(t), n -= r;
+return t = Math.max(t, 0), {
 no: t,
-height: r,
-pos: n + r
+size: r,
+pos: n + r,
+startRow: t * this.rowsPerPage,
+endRow: Math.min((t + 1) * this.rowsPerPage - 1, this.count - 1)
 };
 },
 isPageInRange: function(e) {
 return e == Math.max(0, Math.min(this.pageCount - 1, e));
 },
-getPageHeight: function(e) {
-return this.pageHeights[e] || this.defaultPageHeight;
+getPageSize: function(e) {
+var t = this.pageSizes[e];
+if (!t) {
+var n = this.rowsPerPage * e, r = Math.min(this.count - n, this.rowsPerPage);
+t = this.defaultPageSize * (r / this.rowsPerPage);
+}
+return Math.max(1, t);
 },
 invalidatePages: function() {
-this.p0 = this.p1 = null, this.$.page0.setContent(""), this.$.page1.setContent("");
+this.p0 = this.p1 = null, this.p0RowBounds = {}, this.p1RowBounds = {}, this.$.page0.setContent(""), this.$.page1.setContent("");
 },
 invalidateMetrics: function() {
-this.pageHeights = [], this.rowHeight = 0, this.updateMetrics();
+this.pageSizes = [], this.rowSize = 0, this.updateMetrics();
 },
 scroll: function(e, t) {
-var n = this.inherited(arguments);
-return this.update(this.getScrollTop()), n;
-},
-scrollToBottom: function() {
-this.update(this.getScrollBounds().maxTop), this.inherited(arguments);
+var n = this.inherited(arguments), r = this.orientV ? this.getScrollTop() : this.getScrollLeft();
+return this.lastPos === r ? n : (this.lastPos = r, this.update(r), this.pinnedReorderMode && this.reorderScroll(e, t), n);
 },
 setScrollTop: function(e) {
 this.update(e), this.inherited(arguments), this.twiddle();
 },
 getScrollPosition: function() {
-return this.calcPos(this.getScrollTop());
+return this.calcPos(this[this.orientV ? "getScrollTop" : "getScrollLeft"]());
 },
 setScrollPosition: function(e) {
-this.setScrollTop(this.calcPos(e));
+this[this.orientV ? "setScrollTop" : "setScrollLeft"](this.calcPos(e));
+},
+scrollToBottom: function() {
+this.update(this.getScrollBounds().maxTop), this.inherited(arguments);
 },
 scrollToRow: function(e) {
-var t = Math.floor(e / this.rowsPerPage), n = e % this.rowsPerPage, r = this.pageToPosition(t);
+var t = this.pageForRow(e), n = e % this.rowsPerPage, r = this.pageToPosition(t);
 this.updateForPosition(r), r = this.pageToPosition(t), this.setScrollPosition(r);
 if (t == this.p0 || t == this.p1) {
 var i = this.$.generator.fetchRowNode(e);
 if (i) {
-var s = i.offsetTop;
-this.bottomUp && (s = this.getPageHeight(t) - i.offsetHeight - s);
+var s = this.orientV ? i.offsetTop : i.offsetLeft;
+this.bottomUp && (s = this.getPageSize(t) - (this.orientV ? i.offsetHeight : i.offsetWidth) - s);
 var o = this.getScrollPosition() + s;
 this.setScrollPosition(o);
 }
 }
 },
 scrollToStart: function() {
-this[this.bottomUp ? "scrollToBottom" : "scrollToTop"]();
+this[this.bottomUp ? this.orientV ? "scrollToBottom" : "scrollToRight" : "scrollToTop"]();
 },
 scrollToEnd: function() {
-this[this.bottomUp ? "scrollToTop" : "scrollToBottom"]();
+this[this.bottomUp ? this.orientV ? "scrollToTop" : "scrollToLeft" : this.orientV ? "scrollToBottom" : "scrollToRight"]();
 },
 refresh: function() {
-this.invalidatePages(), this.update(this.getScrollTop()), this.stabilize(), enyo.platform.android === 4 && this.twiddle();
+this.invalidatePages(), this.update(this[this.orientV ? "getScrollTop" : "getScrollLeft"]()), this.stabilize(), enyo.platform.android === 4 && this.twiddle();
 },
 reset: function() {
 this.getSelection().clear(), this.invalidateMetrics(), this.invalidatePages(), this.stabilize(), this.scrollToStart();
@@ -5961,6 +7056,9 @@ return this.$.generator.isSelected(e);
 renderRow: function(e) {
 this.$.generator.renderRow(e);
 },
+rowRendered: function(e, t) {
+this.updateRowBounds(t.rowIndex);
+},
 prepareRow: function(e) {
 this.$.generator.prepareRow(e);
 },
@@ -5976,6 +7074,356 @@ return this.twiddle(), !0;
 twiddle: function() {
 var e = this.getStrategy();
 enyo.call(e, "twiddle");
+},
+pageForPageNumber: function(e, t) {
+return e % 2 === 0 ? !t || e === this.p0 ? this.$.page0 : null : !t || e === this.p1 ? this.$.page1 : null;
+},
+shouldStartReordering: function(e, t) {
+return !!this.getReorderable() && t.rowIndex >= 0 && !this.pinnedReorderMode && e === this.$.strategy && t.index >= 0 ? !0 : !1;
+},
+startReordering: function(e) {
+this.$.strategy.listReordering = !0, this.buildReorderContainer(), this.doSetupReorderComponents(e), this.styleReorderContainer(e), this.draggingRowIndex = this.placeholderRowIndex = e.rowIndex, this.draggingRowNode = e.target, this.removedInitialPage = !1, this.itemMoved = !1, this.initialPageNumber = this.currentPageNumber = this.pageForRow(e.rowIndex), this.prevScrollTop = this.getScrollTop(), this.replaceNodeWithPlaceholder(e.rowIndex);
+},
+buildReorderContainer: function() {
+this.$.reorderContainer.destroyClientControls();
+for (var e = 0; e < this.reorderComponents.length; e++) this.$.reorderContainer.createComponent(this.reorderComponents[e], {
+owner: this.owner
+});
+this.$.reorderContainer.render();
+},
+styleReorderContainer: function(e) {
+this.setItemPosition(this.$.reorderContainer, e.rowIndex), this.setItemBounds(this.$.reorderContainer, e.rowIndex), this.$.reorderContainer.setShowing(!0), this.centerReorderContainer && this.centerReorderContainerOnPointer(e);
+},
+appendNodeToReorderContainer: function(e) {
+this.$.reorderContainer.createComponent({
+allowHtml: !0,
+content: e.innerHTML
+}).render();
+},
+centerReorderContainerOnPointer: function(e) {
+var t = enyo.dom.calcNodePosition(this.hasNode()), n = e.pageX - t.left - parseInt(this.$.reorderContainer.domStyles.width, 10) / 2, r = e.pageY - t.top + this.getScrollTop() - parseInt(this.$.reorderContainer.domStyles.height, 10) / 2;
+this.getStrategyKind() != "ScrollStrategy" && (n -= this.getScrollLeft(), r -= this.getScrollTop()), this.positionReorderContainer(n, r);
+},
+positionReorderContainer: function(e, t) {
+this.$.reorderContainer.addClass("enyo-animatedTopAndLeft"), this.$.reorderContainer.addStyles("left:" + e + "px;top:" + t + "px;"), this.setPositionReorderContainerTimeout();
+},
+setPositionReorderContainerTimeout: function() {
+this.clearPositionReorderContainerTimeout(), this.positionReorderContainerTimeout = setTimeout(enyo.bind(this, function() {
+this.$.reorderContainer.removeClass("enyo-animatedTopAndLeft"), this.clearPositionReorderContainerTimeout();
+}), 100);
+},
+clearPositionReorderContainerTimeout: function() {
+this.positionReorderContainerTimeout && (clearTimeout(this.positionReorderContainerTimeout), this.positionReorderContainerTimeout = null);
+},
+shouldDoReorderDrag: function() {
+return !this.getReorderable() || this.draggingRowIndex < 0 || this.pinnedReorderMode ? !1 : !0;
+},
+reorderDrag: function(e) {
+this.positionReorderNode(e), this.checkForAutoScroll(e), this.updatePlaceholderPosition(e.pageY);
+},
+updatePlaceholderPosition: function(e) {
+var t = this.getRowIndexFromCoordinate(e);
+t !== -1 && (t >= this.placeholderRowIndex ? this.movePlaceholderToIndex(Math.min(this.count, t + 1)) : this.movePlaceholderToIndex(t));
+},
+positionReorderNode: function(e) {
+var t = this.$.reorderContainer.getBounds(), n = t.left + e.ddx, r = t.top + e.ddy;
+r = this.getStrategyKind() == "ScrollStrategy" ? r + (this.getScrollTop() - this.prevScrollTop) : r, this.$.reorderContainer.addStyles("top: " + r + "px ; left: " + n + "px"), this.prevScrollTop = this.getScrollTop();
+},
+checkForAutoScroll: function(e) {
+var t = enyo.dom.calcNodePosition(this.hasNode()), n = this.getBounds(), r;
+this.autoscrollPageY = e.pageY, e.pageY - t.top < n.height * this.dragToScrollThreshold ? (r = 100 * (1 - (e.pageY - t.top) / (n.height * this.dragToScrollThreshold)), this.scrollDistance = -1 * r) : e.pageY - t.top > n.height * (1 - this.dragToScrollThreshold) ? (r = 100 * ((e.pageY - t.top - n.height * (1 - this.dragToScrollThreshold)) / (n.height - n.height * (1 - this.dragToScrollThreshold))), this.scrollDistance = 1 * r) : this.scrollDistance = 0, this.scrollDistance === 0 ? this.stopAutoScrolling() : this.autoScrollTimeout || this.startAutoScrolling();
+},
+stopAutoScrolling: function() {
+this.autoScrollTimeout && (clearTimeout(this.autoScrollTimeout), this.autoScrollTimeout = null);
+},
+startAutoScrolling: function() {
+this.autoScrollTimeout = setInterval(enyo.bind(this, this.autoScroll), this.autoScrollTimeoutMS);
+},
+autoScroll: function() {
+this.scrollDistance === 0 ? this.stopAutoScrolling() : this.autoScrollTimeout || this.startAutoScrolling(), this.setScrollPosition(this.getScrollPosition() + this.scrollDistance), this.positionReorderNode({
+ddx: 0,
+ddy: 0
+}), this.updatePlaceholderPosition(this.autoscrollPageY);
+},
+movePlaceholderToIndex: function(e) {
+var t, n;
+if (e < 0) return;
+e >= this.count ? (t = null, n = this.pageForPageNumber(this.pageForRow(this.count - 1)).hasNode()) : (t = this.$.generator.fetchRowNode(e), n = t.parentNode);
+var r = this.pageForRow(e);
+r >= this.pageCount && (r = this.currentPageNumber), n.insertBefore(this.placeholderNode, t), this.currentPageNumber !== r && (this.updatePageSize(this.currentPageNumber), this.updatePageSize(r), this.updatePagePositions(r)), this.placeholderRowIndex = e, this.currentPageNumber = r, this.itemMoved = !0;
+},
+finishReordering: function(e, t) {
+if (!this.isReordering() || this.pinnedReorderMode || this.completeReorderTimeout) return;
+return this.stopAutoScrolling(), this.$.strategy.listReordering = !1, this.moveReorderedContainerToDroppedPosition(t), this.completeReorderTimeout = setTimeout(enyo.bind(this, this.completeFinishReordering, t), 100), t.preventDefault(), !0;
+},
+moveReorderedContainerToDroppedPosition: function() {
+var e = this.getRelativeOffset(this.placeholderNode, this.hasNode()), t = this.getStrategyKind() == "ScrollStrategy" ? e.top : e.top - this.getScrollTop(), n = e.left - this.getScrollLeft();
+this.positionReorderContainer(n, t);
+},
+completeFinishReordering: function(e) {
+this.completeReorderTimeout = null, this.placeholderRowIndex > this.draggingRowIndex && (this.placeholderRowIndex = Math.max(0, this.placeholderRowIndex - 1));
+if (this.draggingRowIndex == this.placeholderRowIndex && this.pinnedReorderComponents.length && !this.pinnedReorderMode && !this.itemMoved) {
+this.beginPinnedReorder(e);
+return;
+}
+this.removeDraggingRowNode(), this.removePlaceholderNode(), this.emptyAndHideReorderContainer(), this.pinnedReorderMode = !1, this.reorderRows(e), this.draggingRowIndex = this.placeholderRowIndex = -1, this.refresh();
+},
+beginPinnedReorder: function(e) {
+this.buildPinnedReorderContainer(), this.doSetupPinnedReorderComponents(enyo.mixin(e, {
+index: this.draggingRowIndex
+})), this.pinnedReorderMode = !0, this.initialPinPosition = e.pageY;
+},
+emptyAndHideReorderContainer: function() {
+this.$.reorderContainer.destroyComponents(), this.$.reorderContainer.setShowing(!1);
+},
+buildPinnedReorderContainer: function() {
+this.$.reorderContainer.destroyClientControls();
+for (var e = 0; e < this.pinnedReorderComponents.length; e++) this.$.reorderContainer.createComponent(this.pinnedReorderComponents[e], {
+owner: this.owner
+});
+this.$.reorderContainer.render();
+},
+reorderRows: function(e) {
+this.doReorder(this.makeReorderEvent(e)), this.positionReorderedNode(), this.updateListIndices();
+},
+makeReorderEvent: function(e) {
+return e.reorderFrom = this.draggingRowIndex, e.reorderTo = this.placeholderRowIndex, e;
+},
+positionReorderedNode: function() {
+if (!this.removedInitialPage) {
+var e = this.$.generator.fetchRowNode(this.placeholderRowIndex);
+e && (e.parentNode.insertBefore(this.hiddenNode, e), this.showNode(this.hiddenNode)), this.hiddenNode = null;
+if (this.currentPageNumber != this.initialPageNumber) {
+var t, n, r = this.pageForPageNumber(this.currentPageNumber), i = this.pageForPageNumber(this.currentPageNumber + 1);
+this.initialPageNumber < this.currentPageNumber ? (t = r.hasNode().firstChild, i.hasNode().appendChild(t)) : (t = r.hasNode().lastChild, n = i.hasNode().firstChild, i.hasNode().insertBefore(t, n)), this.correctPageSizes(), this.updatePagePositions(this.initialPageNumber);
+}
+}
+},
+updateListIndices: function() {
+if (this.shouldDoRefresh()) {
+this.refresh(), this.correctPageSizes();
+return;
+}
+var e = Math.min(this.draggingRowIndex, this.placeholderRowIndex), t = Math.max(this.draggingRowIndex, this.placeholderRowIndex), n = this.draggingRowIndex - this.placeholderRowIndex > 0 ? 1 : -1, r, i, s, o;
+if (n === 1) {
+r = this.$.generator.fetchRowNode(this.draggingRowIndex), r && r.setAttribute("data-enyo-index", "reordered");
+for (i = t - 1, s = t; i >= e; i--) {
+r = this.$.generator.fetchRowNode(i);
+if (!r) continue;
+o = parseInt(r.getAttribute("data-enyo-index"), 10), s = o + 1, r.setAttribute("data-enyo-index", s);
+}
+r = this.hasNode().querySelector('[data-enyo-index="reordered"]'), r.setAttribute("data-enyo-index", this.placeholderRowIndex);
+} else {
+r = this.$.generator.fetchRowNode(this.draggingRowIndex), r && r.setAttribute("data-enyo-index", this.placeholderRowIndex);
+for (i = e + 1, s = e; i <= t; i++) {
+r = this.$.generator.fetchRowNode(i);
+if (!r) continue;
+o = parseInt(r.getAttribute("data-enyo-index"), 10), s = o - 1, r.setAttribute("data-enyo-index", s);
+}
+}
+},
+shouldDoRefresh: function() {
+return Math.abs(this.initialPageNumber - this.currentPageNumber) > 1;
+},
+getNodeStyle: function(e) {
+var t = this.$.generator.fetchRowNode(e);
+if (!t) return;
+var n = this.getRelativeOffset(t, this.hasNode()), r = enyo.dom.getBounds(t);
+return {
+h: r.height,
+w: r.width,
+left: n.left,
+top: n.top
+};
+},
+getRelativeOffset: function(e, t) {
+var n = {
+top: 0,
+left: 0
+};
+if (e !== t && e.parentNode) do n.top += e.offsetTop || 0, n.left += e.offsetLeft || 0, e = e.offsetParent; while (e && e !== t);
+return n;
+},
+replaceNodeWithPlaceholder: function(e) {
+var t = this.$.generator.fetchRowNode(e);
+if (!t) {
+enyo.log("No node - " + e);
+return;
+}
+this.placeholderNode = this.createPlaceholderNode(t), this.hiddenNode = this.hideNode(t);
+var n = this.pageForPageNumber(this.currentPageNumber);
+n.hasNode().insertBefore(this.placeholderNode, this.hiddenNode);
+},
+createPlaceholderNode: function(e) {
+var t = this.$.placeholder.hasNode().cloneNode(!0), n = enyo.dom.getBounds(e);
+return t.style.height = n.height + "px", t.style.width = n.width + "px", t;
+},
+removePlaceholderNode: function() {
+this.removeNode(this.placeholderNode), this.placeholderNode = null;
+},
+removeDraggingRowNode: function() {
+this.draggingRowNode = null;
+var e = this.$.holdingarea.hasNode();
+e.innerHTML = "";
+},
+removeNode: function(e) {
+if (!e || !e.parentNode) return;
+e.parentNode.removeChild(e);
+},
+updatePageSize: function(e) {
+if (e < 0) return;
+var t = this.pageForPageNumber(e, !0);
+if (t) {
+var n = this.pageSizes[e], r = Math.max(1, t.getBounds().height);
+this.pageSizes[e] = r, this.portSize += r - n;
+}
+},
+updatePagePositions: function(e) {
+this.positionPage(this.currentPageNumber, this.pageForPageNumber(this.currentPageNumber)), this.positionPage(e, this.pageForPageNumber(e));
+},
+correctPageSizes: function() {
+var e = this.initialPageNumber % 2;
+this.updatePageSize(this.currentPageNumber, this.$["page" + this.currentPage]), e != this.currentPageNumber && this.updatePageSize(this.initialPageNumber, this.$["page" + e]);
+},
+hideNode: function(e) {
+return e.style.display = "none", e;
+},
+showNode: function(e) {
+return e.style.display = "block", e;
+},
+dropPinnedRow: function(e) {
+this.moveReorderedContainerToDroppedPosition(e), this.completeReorderTimeout = setTimeout(enyo.bind(this, this.completeFinishReordering, e), 100);
+return;
+},
+cancelPinnedMode: function(e) {
+this.placeholderRowIndex = this.draggingRowIndex, this.dropPinnedRow(e);
+},
+getRowIndexFromCoordinate: function(e) {
+var t = this.getScrollTop() + e - enyo.dom.calcNodePosition(this.hasNode()).top;
+if (t < 0) return -1;
+var n = this.positionToPageInfo(t), r = n.no == this.p0 ? this.p0RowBounds : this.p1RowBounds;
+if (!r) return this.count;
+var i = n.pos, s = this.placeholderNode ? enyo.dom.getBounds(this.placeholderNode).height : 0, o = 0;
+for (var u = n.startRow; u <= n.endRow; ++u) {
+if (u === this.placeholderRowIndex) {
+o += s;
+if (o >= i) return -1;
+}
+if (u !== this.draggingRowIndex) {
+o += r[u].height;
+if (o >= i) return u;
+}
+}
+return u;
+},
+getIndexPosition: function(e) {
+return enyo.dom.calcNodePosition(this.$.generator.fetchRowNode(e));
+},
+setItemPosition: function(e, t) {
+var n = this.getNodeStyle(t), r = this.getStrategyKind() == "ScrollStrategy" ? n.top : n.top - this.getScrollTop(), i = "top:" + r + "px; left:" + n.left + "px;";
+e.addStyles(i);
+},
+setItemBounds: function(e, t) {
+var n = this.getNodeStyle(t), r = "width:" + n.w + "px; height:" + n.h + "px;";
+e.addStyles(r);
+},
+reorderScroll: function(e, t) {
+this.getStrategyKind() == "ScrollStrategy" && this.$.reorderContainer.addStyles("top:" + (this.initialPinPosition + this.getScrollTop() - this.rowSize) + "px;"), this.updatePlaceholderPosition(this.initialPinPosition);
+},
+hideReorderingRow: function() {
+var e = this.hasNode().querySelector('[data-enyo-index="' + this.draggingRowIndex + '"]');
+e && (this.hiddenNode = this.hideNode(e));
+},
+isReordering: function() {
+return this.draggingRowIndex > -1;
+},
+isSwiping: function() {
+return this.swipeIndex != null && !this.swipeComplete && this.swipeDirection != null;
+},
+swipeDragStart: function(e, t) {
+return t.index == null || t.vertical ? !0 : (this.completeSwipeTimeout && this.completeSwipe(t), this.swipeComplete = !1, this.swipeIndex != t.index && (this.clearSwipeables(), this.swipeIndex = t.index), this.swipeDirection = t.xDirection, this.persistentItemVisible || this.startSwipe(t), this.draggedXDistance = 0, this.draggedYDistance = 0, !0);
+},
+swipeDrag: function(e, t) {
+return this.persistentItemVisible ? (this.dragPersistentItem(t), this.preventDragPropagation) : this.isSwiping() ? (this.dragSwipeableComponents(this.calcNewDragPosition(t.ddx)), this.draggedXDistance = t.dx, this.draggedYDistance = t.dy, !0) : !1;
+},
+swipeDragFinish: function(e, t) {
+if (this.persistentItemVisible) this.dragFinishPersistentItem(t); else {
+if (!this.isSwiping()) return !1;
+var n = this.calcPercentageDragged(this.draggedXDistance);
+n > this.percentageDraggedThreshold && t.xDirection === this.swipeDirection ? this.swipe(this.fastSwipeSpeedMS) : this.backOutSwipe(t);
+}
+return this.preventDragPropagation;
+},
+isSwipeable: function() {
+return this.enableSwipe && this.$.swipeableComponents.controls.length !== 0 && !this.isReordering() && !this.pinnedReorderMode;
+},
+positionSwipeableContainer: function(e, t) {
+var n = this.$.generator.fetchRowNode(e);
+if (!n) return;
+var r = this.getRelativeOffset(n, this.hasNode()), i = enyo.dom.getBounds(n), s = t == 1 ? -1 * i.width : i.width;
+this.$.swipeableComponents.addStyles("top: " + r.top + "px; left: " + s + "px; height: " + i.height + "px; width: " + i.width + "px;");
+},
+calcNewDragPosition: function(e) {
+var t = this.$.swipeableComponents.getBounds(), n = t.left, r = this.$.swipeableComponents.getBounds(), i = this.swipeDirection == 1 ? 0 : -1 * r.width, s = this.swipeDirection == 1 ? n + e > i ? i : n + e : n + e < i ? i : n + e;
+return s;
+},
+dragSwipeableComponents: function(e) {
+this.$.swipeableComponents.applyStyle("left", e + "px");
+},
+startSwipe: function(e) {
+e.index = this.swipeIndex, this.positionSwipeableContainer(this.swipeIndex, e.xDirection), this.$.swipeableComponents.setShowing(!0), this.setPersistentItemOrigin(e.xDirection), this.doSetupSwipeItem(e);
+},
+dragPersistentItem: function(e) {
+var t = 0, n = this.persistentItemOrigin == "right" ? Math.max(t, t + e.dx) : Math.min(t, t + e.dx);
+this.$.swipeableComponents.applyStyle("left", n + "px");
+},
+dragFinishPersistentItem: function(e) {
+var t = this.calcPercentageDragged(e.dx) > .2, n = e.dx > 0 ? "right" : e.dx < 0 ? "left" : null;
+this.persistentItemOrigin == n ? t ? this.slideAwayItem() : this.bounceItem(e) : this.bounceItem(e);
+},
+setPersistentItemOrigin: function(e) {
+this.persistentItemOrigin = e == 1 ? "left" : "right";
+},
+calcPercentageDragged: function(e) {
+return Math.abs(e / this.$.swipeableComponents.getBounds().width);
+},
+swipe: function(e) {
+this.swipeComplete = !0, this.animateSwipe(0, e);
+},
+backOutSwipe: function(e) {
+var t = this.$.swipeableComponents.getBounds(), n = this.swipeDirection == 1 ? -1 * t.width : t.width;
+this.animateSwipe(n, this.fastSwipeSpeedMS), this.swipeDirection = null;
+},
+bounceItem: function(e) {
+var t = this.$.swipeableComponents.getBounds();
+t.left != t.width && this.animateSwipe(0, this.normalSwipeSpeedMS);
+},
+slideAwayItem: function() {
+var e = this.$.swipeableComponents, t = e.getBounds().width, n = this.persistentItemOrigin == "left" ? -1 * t : t;
+this.animateSwipe(n, this.normalSwipeSpeedMS), this.persistentItemVisible = !1, this.setPersistSwipeableItem(!1);
+},
+clearSwipeables: function() {
+this.$.swipeableComponents.setShowing(!1), this.persistentItemVisible = !1, this.setPersistSwipeableItem(!1);
+},
+completeSwipe: function(e) {
+this.completeSwipeTimeout && (clearTimeout(this.completeSwipeTimeout), this.completeSwipeTimeout = null), this.getPersistSwipeableItem() ? this.persistentItemVisible = !0 : (this.$.swipeableComponents.setShowing(!1), this.swipeComplete && this.doSwipeComplete({
+index: this.swipeIndex,
+xDirection: this.swipeDirection
+})), this.swipeIndex = null, this.swipeDirection = null;
+},
+animateSwipe: function(e, t) {
+var n = enyo.now(), r = 0, i = this.$.swipeableComponents, s = parseInt(i.domStyles.left, 10), o = e - s;
+this.stopAnimateSwipe();
+var u = enyo.bind(this, function() {
+var e = enyo.now() - n, r = e / t, a = s + o * Math.min(r, 1);
+i.applyStyle("left", a + "px"), this.job = enyo.requestAnimationFrame(u), e / t >= 1 && (this.stopAnimateSwipe(), this.completeSwipeTimeout = setTimeout(enyo.bind(this, function() {
+this.completeSwipe();
+}), this.completeSwipeDelayMS));
+});
+this.job = enyo.requestAnimationFrame(u);
+},
+stopAnimateSwipe: function() {
+this.job && (this.job = enyo.cancelRequestAnimationFrame(this.job));
 }
 });
 
@@ -6023,7 +7471,10 @@ onCreate: "setPully"
 this.listTools.splice(0, 0, e), this.inherited(arguments), this.setPulling();
 },
 initComponents: function() {
-this.createChrome(this.pulldownTools), this.accel = enyo.dom.canAccelerate(), this.translation = this.accel ? "translate3d" : "translate", this.inherited(arguments);
+this.createChrome(this.pulldownTools), this.accel = enyo.dom.canAccelerate(), this.translation = this.accel ? "translate3d" : "translate", this.strategyKind = this.resetStrategyKind(), this.inherited(arguments);
+},
+resetStrategyKind: function() {
+return enyo.platform.android >= 3 ? "TranslateScrollStrategy" : "TouchScrollStrategy";
 },
 setPully: function(e, t) {
 this.pully = t.originator;
@@ -6034,7 +7485,7 @@ this.firedPullStart = !1, this.firedPull = !1, this.firedPullCancel = !1;
 scroll: function(e, t) {
 var n = this.inherited(arguments);
 this.completingPull && this.pully.setShowing(!1);
-var r = this.getStrategy().$.scrollMath, i = r.y;
+var r = this.getStrategy().$.scrollMath || this.getStrategy(), i = -1 * this.getScrollTop();
 return r.isInOverScroll() && i > 0 && (enyo.dom.transformValue(this.$.pulldown, this.translation, "0," + i + "px" + (this.accel ? ",0" : "")), this.firedPullStart || (this.firedPullStart = !0, this.pullStart(), this.pullHeight = this.$.pulldown.getBounds().height), i > this.pullHeight && !this.firedPull && (this.firedPull = !0, this.firedPullCancel = !1, this.pull()), this.firedPull && !this.firedPullCancel && i < this.pullHeight && (this.firedPullCancel = !0, this.firedPull = !1, this.pullCancel())), n;
 },
 scrollStopHandler: function() {
@@ -6042,12 +7493,14 @@ this.completingPull && (this.completingPull = !1, this.doPullComplete());
 },
 dragfinish: function() {
 if (this.firedPull) {
-var e = this.getStrategy().$.scrollMath;
-e.setScrollY(e.y - this.pullHeight), this.pullRelease();
+var e = this.getStrategy().$.scrollMath || this.getStrategy();
+e.setScrollY(-1 * this.getScrollTop() - this.pullHeight), this.pullRelease();
 }
 },
 completePull: function() {
-this.completingPull = !0, this.$.strategy.$.scrollMath.setScrollY(this.pullHeight), this.$.strategy.$.scrollMath.start();
+this.completingPull = !0;
+var e = this.getStrategy().$.scrollMath || this.getStrategy();
+e.setScrollY(this.pullHeight), e.start();
 },
 pullStart: function() {
 this.setPulling(), this.pully.setShowing(!1), this.$.puller.setShowing(!0), this.doPullStart();
@@ -6107,12 +7560,16 @@ components: [ {
 name: "aboveClient"
 }, {
 name: "generator",
-kind: "enyo.FlyweightRepeater",
+kind: "FlyweightRepeater",
 canGenerate: !1,
 components: [ {
 tag: null,
 name: "client"
 } ]
+}, {
+name: "holdingarea",
+allowHtml: !0,
+classes: "enyo-list-holdingarea"
 }, {
 name: "page0",
 allowHtml: !0,
@@ -6123,6 +7580,11 @@ allowHtml: !0,
 classes: "enyo-list-page"
 }, {
 name: "belowClient"
+}, {
+name: "placeholder"
+}, {
+name: "swipeableComponents",
+style: "position:absolute; display:block; top:-1000px; left:0px;"
 } ]
 } ],
 aboveComponents: null,
@@ -6134,8 +7596,8 @@ owner: this.owner
 });
 },
 updateMetrics: function() {
-this.defaultPageHeight = this.rowsPerPage * (this.rowHeight || 100), this.pageCount = Math.ceil(this.count / this.rowsPerPage), this.aboveHeight = this.$.aboveClient.getBounds().height, this.belowHeight = this.$.belowClient.getBounds().height, this.portSize = this.aboveHeight + this.belowHeight;
-for (var e = 0; e < this.pageCount; e++) this.portSize += this.getPageHeight(e);
+this.defaultPageSize = this.rowsPerPage * (this.rowSize || 100), this.pageCount = Math.ceil(this.count / this.rowsPerPage), this.aboveHeight = this.$.aboveClient.getBounds().height, this.belowHeight = this.$.belowClient.getBounds().height, this.portSize = this.aboveHeight + this.belowHeight;
+for (var e = 0; e < this.pageCount; e++) this.portSize += this.getPageSize(e);
 this.adjustPortSize();
 },
 positionPage: function(e, t) {
@@ -6146,6 +7608,241 @@ n += r, t.applyStyle(this.pageBound, n + "px");
 scrollToContentStart: function() {
 var e = this.bottomUp ? this.belowHeight : this.aboveHeight;
 this.setScrollPosition(e);
+}
+});
+
+// GridFlyweightRepeater.js
+
+enyo.kind({
+name: "enyo.GridFlyWeightRepeater",
+kind: "enyo.FlyweightRepeater",
+events: {
+onSizeupItem: ""
+},
+itemsPerRow: 0,
+_itemsFromPreviousPage: 0,
+generateChildHtml: function() {
+return this.itemFluidWidth || this.itemFixedSize ? this._generateChildHtmlEqualSizedItems() : this._generateChildHtmlVariableSizedItems();
+},
+_generateChildHtmlEqualSizedItems: function() {
+var e = this.owner.hasNode().clientWidth, t = this.$.client, n = "", r = 0, i = this.itemWidth, s = this.itemHeight;
+if (this.itemFluidWidth) {
+r = 100 / this.itemsPerRow;
+var o = 0;
+this.itemSpacing >= 0 && (o = (this.itemsPerRow + 1) * this.itemSpacing, r = 100 / this.itemsPerRow - 100 * o / (this.itemsPerRow * e)), i = r / 100 * e, s = i * (this.itemHeight / this.itemWidth);
+}
+for (var u = this.rowOffset; u < this.rowOffset + this.count; u++) t.setAttribute("data-enyo-index", u), this.doSetupItem({
+index: u,
+selected: this.isSelected(u)
+}), this.itemFluidWidth ? t.addStyles("width:" + r + "%;height:" + s + "px;") : t.addStyles("width:" + this.itemWidth + "px;height:" + this.itemHeight + "px;"), this.itemSpacing >= 0 && (t.addStyles("margin-top:" + this.itemSpacing + "px; margin-left:" + this.itemSpacing + "px;"), u % this.itemsPerRow == this.itemsPerRow - 1 ? t.addStyles("margin-right:" + this.itemSpacing + "px;") : t.addStyles("margin-right: 0px;"), u >= this.count - this.itemsPerRow && t.addStyles("margin-bottom:" + this.itemSpacing + "px;")), n += t.generateHtml(), t.teardownRender();
+return n;
+},
+_generateChildHtmlVariableSizedItems: function() {
+this.index = null;
+var e = null, t = this.$.client, n = this.owner.hasNode().clientWidth, r = 0, i = 0, s = 0, o = 0, u = 0, a = 0, f = 0, l = 0, c = 0, h = this.itemMinWidth / this.itemMinHeight, p = [ {
+index: 0,
+items: []
+} ], d = !1, v = this.owner.$._dummy_.hasNode();
+this.owner.page == 0 && (this._itemsFromPreviousPage = 0);
+var m = this.count + this._itemsFromPreviousPage;
+for (var g = 0, y = g + this.rowOffset - this._itemsFromPreviousPage; g < m; g++, y++) {
+l = 0, c = 0, this.doSizeupItem({
+index: y,
+selected: this.isSelected(y)
+}), l = this.itemWidth, c = this.itemHeight;
+if (!l || l == undefined || isNaN(l) || l <= 0) this.doSetupItem({
+index: y,
+selected: this.isSelected(y)
+}), v.innerHTML = t.generateChildHtml(), l = v.clientWidth, c = v.clientHeight;
+if (!l || l == undefined || isNaN(l) || l <= 0) l = this.itemMinWidth, c = this.itemMinHeight;
+if (!c || c == undefined || isNaN(c) || c <= 0) c = this.itemMinHeight;
+h = l / c, r = Math.min(l, n), this.itemMinWidth && this.itemMinWidth > 0 && (r = Math.max(l, this.itemMinWidth)), lastRowInPage = g == m - 1, s = r / h, i += r, o += s, e = {
+index: y,
+pageIndex: g,
+width: r,
+height: s
+}, p[f].items.push(e);
+if (!this.normalizeRows) continue;
+u = i / p[f].items.length, a = o / p[f].items.length;
+if (i >= n || lastRowInPage) {
+p[f].avgHeight = a, p[f].index = f;
+var b = p[f].items.length, w = (n - i) / b, E = y == this.owner.count - 1;
+this._itemsFromPreviousPage = 0;
+if (lastRowInPage && w + u > 1.5 * u) {
+this._itemsFromPreviousPage = b, p[f] = {
+avgHeight: 0,
+index: f,
+items: []
+};
+break;
+}
+this._normalizeRow(p[f]), lastRowInPage || (f++, p[f] = {
+avgHeight: 0,
+index: 0,
+items: []
+}), i = 0, o = 0, a = 0, u = 0, r = 0, s = 0, l = 0, c = 0;
+}
+}
+v.innerHTML = "";
+var S = "", x = "", T;
+for (var g = 0; g < p.length; g++) {
+T = p[g];
+if (!T.items || T.items.length == 0) continue;
+for (var N = 0; N < T.items.length; N++) e = T.items[N], this.doSetupItem({
+index: e.index,
+selected: this.isSelected(e.index)
+}), t.setAttribute("data-enyo-index", e.index), t.addStyles("width:" + e.width + "px;height:" + e.height + "px;"), this.itemSpacing >= 0 && t.addStyles("margin-top:" + this.itemSpacing + "px;margin-left:" + this.itemSpacing + "px;"), x = t.generateHtml(), t.teardownRender(), S += x;
+}
+return S;
+},
+_normalizeRow: function(e) {
+if (!this.normalizeRows) return;
+if (!e.items || e.items.length == 0) return;
+var t = this.owner.hasNode().clientWidth, n, r = 0, i = 0, s = "", o = 0, u = 0, a = 0, f = 0;
+for (var l = 0; l < e.items.length; l++) n = e.items[l], o = n.width, u = n.height, i = Math.floor(e.avgHeight / u * o), s += " " + i, n.width = i, n.height = e.avgHeight, r += i, this.itemSpacing >= 0 && (r += this.itemSpacing, l == e.items.length - 1 && (r += this.itemSpacing));
+f = t - r;
+var a = t / (t - f);
+r = 0, i = 0, s = "";
+for (var l = 0; l < e.items.length; l++) {
+n = e.items[l], o = n.width, u = n.height, i = Math.floor(o * a), s += " " + i;
+var c = Math.floor(u * a);
+n.width = i, n.height = c, r += i, this.itemSpacing >= 0 && (r += this.itemSpacing, l == e.items.length - 1 && (r += this.itemSpacing));
+}
+f = t - r, n = e.items[e.items.length - 1], o = n.width, u = n.height, n.width = o + f, n.height = u;
+}
+});
+
+// GridList.js
+
+enyo.kind({
+name: "enyo.GridList",
+kind: "enyo.List",
+classes: "enyo-gridlist",
+published: {
+itemFluidWidth: !1,
+itemFixedSize: !1,
+itemMinWidth: 160,
+itemMinHeight: 160,
+itemWidth: 160,
+itemHeight: 160,
+itemSpacing: 0,
+normalizeRows: !1
+},
+horizontal: "hidden",
+events: {
+onSizeupItem: ""
+},
+show: function(e) {
+this._calculateItemsPerRow(), this.setCount(e), this.reset();
+},
+create: function() {
+this._setComponents(), this.inherited(arguments), this.itemFluidWidthChanged(), this.itemFixedSizeChanged(), this.itemMinWidthChanged(), this.itemMinHeightChanged(), this.itemWidthChanged(), this.itemHeightChanged(), this.itemSpacingChanged(), this.normalizeRowsChanged(), this.$.generator.setClientClasses("enyo-gridlist-row");
+},
+itemFluidWidthChanged: function() {
+this.$.generator.itemFluidWidth = this.itemFluidWidth, this.setNormalizeRows(!this.itemFluidWidth && !this.itemFixedSize);
+},
+itemFixedSizeChanged: function() {
+this.$.generator.itemFixedSize = this.itemFixedSize, this.setNormalizeRows(!this.itemFluidWidth && !this.itemFixedSize);
+},
+itemWidthChanged: function() {
+this.$.generator.itemWidth = this.itemWidth;
+},
+itemHeightChanged: function() {
+this.$.generator.itemHeight = this.itemHeight;
+},
+itemMinWidthChanged: function() {
+var e = this.hasNode();
+if (e) {
+if (!this.itemMinWidth || isNaN(this.itemMinWidth) || this.itemMinWidth == 0) this.itemMinWidth = 160;
+this.itemMinWidth = Math.min(this.itemMinWidth, e.clientWidth);
+}
+this.$.generator.itemMinWidth = this.itemMinWidth;
+},
+itemMinHeightChanged: function() {
+var e = this.hasNode();
+if (e) {
+if (!this.itemMinHeight || isNaN(this.itemMinHeight) || this.itemMinHeight == 0) this.itemMinHeight = 160;
+this.itemMinHeight = Math.min(this.itemMinHeight, e.clientHeight);
+}
+this.$.generator.itemMinHeight = this.itemMinHeight;
+},
+itemSpacingChanged: function() {
+this.itemSpacing < 0 && (this.itemSpacing = 0), this.itemSpacing = this.itemSpacing, this.$.generator.itemSpacing = this.itemSpacing;
+},
+normalizeRowsChanged: function() {
+this.$.generator.normalizeRows = this.normalizeRows;
+},
+bottomUpChanged: function() {
+this.bottomUp = !1, this.pageBound = "top";
+},
+reflow: function() {
+this._calculateItemsPerRow(), this.inherited(arguments);
+},
+_calculateItemsPerRow: function() {
+var e = this.hasNode();
+if (e) {
+this.itemsPerRow = Math.floor((e.clientWidth - this.itemSpacing) / (this.itemMinWidth + this.itemSpacing));
+var t = Math.round((e.clientHeight - this.itemSpacing) / (this.itemMinHeight + this.itemSpacing));
+if (this.itemFixedSize || this.itemFluidWidth) {
+var n = Math.floor((e.clientWidth - this.itemSpacing) / (this.itemWidth + this.itemSpacing)), r = Math.floor(n), i = Math.ceil(n), s = e.clientWidth - this.itemSpacing - i * (this.itemWidth + this.itemSpacing);
+this.itemsPerRow = s > 0 ? i : r, t = Math.round((e.clientHeight - this.itemSpacing) / (this.itemHeight + this.itemSpacing));
+}
+this.itemsPerRow = Math.max(1, this.itemsPerRow), this.rowsPerPage = 3 * this.itemsPerRow * t, this.$.generator.itemsPerRow = this.itemsPerRow;
+}
+},
+_setComponents: function() {
+var e = this.listTools[0].components, t;
+this.createComponent(new enyo.Component({
+name: "_dummy_",
+allowHtml: !0,
+classes: "enyo-gridlist-dummy",
+showing: !1
+}, {
+owner: this
+}));
+for (var n = 0; n < e.length; n++) {
+t = e[n];
+if (t.name == "generator") {
+t.kind = "enyo.GridFlyWeightRepeater";
+return;
+}
+}
+}
+});
+
+// GridListImageItem.js
+
+enyo.kind({
+name: "enyo.GridList.ImageItem",
+classes: "enyo-gridlist-imageitem",
+components: [ {
+name: "image",
+kind: "enyo.Image"
+}, {
+name: "caption",
+classes: "caption"
+} ],
+create: function() {
+this.inherited(arguments), this.sourceChanged();
+},
+published: {
+source: "",
+caption: "",
+selected: !1
+},
+sourceChanged: function() {
+if (!this.source || this.source == "") return;
+this.$.image.setAttribute("src", this.source);
+},
+captionChanged: function() {
+if (!this.caption || this.caption == "") {
+this.$.caption.setContent(this.caption), this.$.caption.setShowing(!1);
+return;
+}
+this.$.caption.setShowing(!0), this.$.caption.setContent(this.caption);
+},
+selectedChanged: function() {
+this.addRemoveClass("selected", this.selected);
 }
 });
 
@@ -6562,17 +8259,23 @@ this.inherited(arguments);
 enyo.kind({
 name: "enyo.CollapsingArranger",
 kind: "CarouselArranger",
+peekWidth: 0,
 size: function() {
 this.clearLastSize(), this.inherited(arguments);
 },
 clearLastSize: function() {
 for (var e = 0, t = this.container.getPanels(), n; n = t[e]; e++) n._fit && e != t.length - 1 && (n.applyStyle("width", null), n._fit = null);
 },
+constructor: function() {
+this.inherited(arguments), this.peekWidth = this.container.peekWidth != null ? this.container.peekWidth : this.peekWidth;
+},
 arrange: function(e, t) {
 var n = this.container.getPanels();
-for (var r = 0, i = this.containerPadding.left, s, o; o = n[r]; r++) this.arrangeControl(o, {
+for (var r = 0, i = this.containerPadding.left, s, o, u = 0; o = n[r]; r++) o.getShowing() ? (this.arrangeControl(o, {
+left: i + u * this.peekWidth
+}), r >= t && (i += o.width + o.marginWidth - this.peekWidth), u++) : (this.arrangeControl(o, {
 left: i
-}), r >= t && (i += o.width + o.marginWidth), r == n.length - 1 && t < 0 && this.arrangeControl(o, {
+}), r >= t && (i += o.width + o.marginWidth)), r == n.length - 1 && t < 0 && this.arrangeControl(o, {
 left: i - t
 });
 },
@@ -6596,6 +8299,83 @@ this.fitControl(r, t[n].left);
 },
 fitControl: function(e, t) {
 e._fit = !0, e.applyStyle("width", this.containerBounds.width - t + "px"), e.resized();
+}
+});
+
+// DockRightArranger.js
+
+enyo.kind({
+name: "enyo.DockRightArranger",
+kind: "Arranger",
+basePanel: !1,
+overlap: 0,
+layoutWidth: 0,
+constructor: function() {
+this.inherited(arguments), this.overlap = this.container.overlap != null ? this.container.overlap : this.overlap, this.layoutWidth = this.container.layoutWidth != null ? this.container.layoutWidth : this.layoutWidth;
+},
+size: function() {
+var e = this.container.getPanels(), t = this.containerPadding = this.container.hasNode() ? enyo.dom.calcPaddingExtents(this.container.node) : {}, n = this.containerBounds, r, i, s;
+n.width -= t.left + t.right;
+var o = n.width, u = e.length;
+this.container.transitionPositions = {};
+for (r = 0; s = e[r]; r++) s.width = r === 0 && this.container.basePanel ? o : s.getBounds().width;
+for (r = 0; s = e[r]; r++) {
+r === 0 && this.container.basePanel && s.setBounds({
+width: o
+}), s.setBounds({
+top: t.top,
+bottom: t.bottom
+});
+for (j = 0; s = e[j]; j++) {
+var a;
+if (r === 0 && this.container.basePanel) a = 0; else if (j < r) a = o; else {
+if (r !== j) break;
+var f = o > this.layoutWidth ? this.overlap : 0;
+a = o - e[r].width + f;
+}
+this.container.transitionPositions[r + "." + j] = a;
+}
+if (j < u) {
+var l = !1;
+for (k = r + 1; k < u; k++) {
+var f = 0;
+if (l) f = 0; else if (e[r].width + e[k].width - this.overlap > o) f = 0, l = !0; else {
+f = e[r].width - this.overlap;
+for (i = r; i < k; i++) {
+var c = f + e[i + 1].width - this.overlap;
+if (!(c < o)) {
+f = o;
+break;
+}
+f = c;
+}
+f = o - f;
+}
+this.container.transitionPositions[r + "." + k] = f;
+}
+}
+}
+},
+arrange: function(e, t) {
+var n, r, i = this.container.getPanels(), s = this.container.clamp(t);
+for (n = 0; r = i[n]; n++) {
+var o = this.container.transitionPositions[n + "." + s];
+this.arrangeControl(r, {
+left: o
+});
+}
+},
+calcArrangementDifference: function(e, t, n, r) {
+var i = this.container.getPanels(), s = e < n ? i[n].width : i[e].width;
+return s;
+},
+destroy: function() {
+var e = this.container.getPanels();
+for (var t = 0, n; n = e[t]; t++) enyo.Arranger.positionControl(n, {
+left: null,
+top: null
+}), n.applyStyle("top", null), n.applyStyle("bottom", null), n.applyStyle("left", null), n.applyStyle("width", null);
+this.inherited(arguments);
 }
 });
 
@@ -6755,7 +8535,10 @@ onEnd: "completed"
 } ],
 fraction: 0,
 create: function() {
-this.transitionPoints = [], this.inherited(arguments), this.arrangerKindChanged(), this.narrowFitChanged(), this.indexChanged(), this.setAttribute("onscroll", enyo.bubbler);
+this.transitionPoints = [], this.inherited(arguments), this.arrangerKindChanged(), this.narrowFitChanged(), this.indexChanged();
+},
+rendered: function() {
+this.inherited(arguments), enyo.makeBubble(this, "scroll");
 },
 domScroll: function(e, t) {
 this.hasNode() && this.node.scrollLeft > 0 && (this.node.scrollLeft = 0);
@@ -6790,7 +8573,7 @@ return e.children;
 },
 getActive: function() {
 var e = this.getPanels(), t = this.index % e.length;
-return t < 0 ? t += e.length : enyo.nop, e[t];
+return t < 0 && (t += e.length), e[t];
 },
 getAnimator: function() {
 return this.$.animator;
@@ -6800,6 +8583,11 @@ this.setPropertyValue("index", e, "indexChanged");
 },
 setIndexDirect: function(e) {
 this.setIndex(e), this.completed();
+},
+selectPanelByName: function(e) {
+if (!e) return;
+var t = 0, n = this.getPanels(), r = n.length;
+for (; t < r; ++t) if (e === n[t].name) return this.setIndex(t), t;
 },
 previous: function() {
 this.setIndex(this.index - 1);
@@ -6820,7 +8608,7 @@ step: function(e) {
 this.fraction = e.value, this.stepTransition();
 },
 completed: function() {
-this.$.animator.isAnimating() && this.$.animator.stop(), this.fraction = 1, this.stepTransition(), this.finishTransition();
+return this.$.animator.isAnimating() && this.$.animator.stop(), this.fraction = 1, this.stepTransition(), this.finishTransition(), !0;
 },
 dragstart: function(e, t) {
 if (this.draggable && this.layout && this.layout.canDragEvent(t)) return t.preventDefault(), this.dragstartTransition(t), this.dragging = !0, this.$.animator.stop(), !0;
@@ -7077,10 +8865,10 @@ for (var t = 0; t < e.length; t++) e[t].applyStyle("position", "absolute");
 },
 positionClientControls: function() {
 var e = this.getClientControls();
-for (var t = 0; t < e.length; t++) for (p in this.position) e[t].applyStyle(p, this.position[p] + "px");
+for (var t = 0; t < e.length; t++) for (var n in this.position) e[t].applyStyle(n, this.position[n] + "px");
 },
 highlightAnchorPointChanged: function() {
-this.highlightAnchorPoint ? this.addClass("pinDebug") : this.removeClass("pinDebug");
+this.addRemoveClass("pinDebug", this.highlightAnchorPoint);
 },
 anchorChanged: function() {
 var e = null, t = null;
@@ -7142,7 +8930,7 @@ ondown: "down"
 } ]
 } ],
 create: function() {
-this.inherited(arguments), this.canTransform = enyo.dom.canTransform(), this.canTransform || this.$.image.applyStyle("position", "relative"), this.canAccelerate = enyo.dom.canAccelerate(), this.bufferImage = new Image, this.bufferImage.onload = enyo.bind(this, "imageLoaded"), this.bufferImage.onerror = enyo.bind(this, "imageError"), this.srcChanged(), this.getStrategy().setDragDuringGesture(!1), this.getStrategy().$.scrollMath.start();
+this.inherited(arguments), this.canTransform = enyo.dom.canTransform(), this.canTransform || this.$.image.applyStyle("position", "relative"), this.canAccelerate = enyo.dom.canAccelerate(), this.bufferImage = new Image, this.bufferImage.onload = enyo.bind(this, "imageLoaded"), this.bufferImage.onerror = enyo.bind(this, "imageError"), this.srcChanged(), this.getStrategy().setDragDuringGesture(!1), this.getStrategy().$.scrollMath && this.getStrategy().$.scrollMath.start();
 },
 down: function(e, t) {
 t.preventDefault();
@@ -7163,7 +8951,7 @@ srcChanged: function() {
 this.src && this.src.length > 0 && this.bufferImage && this.src != this.bufferImage.src && (this.bufferImage.src = this.src);
 },
 imageLoaded: function(e) {
-this.originalWidth = this.bufferImage.width, this.originalHeight = this.bufferImage.height, this.scaleChanged(), this.$.image.setSrc(this.bufferImage.src), enyo.dom.transformValue(this.getStrategy().$.client, "translate3d", "0px, 0px, 0"), this.positionClientControls(this.scale);
+this.originalWidth = this.bufferImage.width, this.originalHeight = this.bufferImage.height, this.scaleChanged(), this.$.image.setSrc(this.bufferImage.src), enyo.dom.transformValue(this.getStrategy().$.client, "translate3d", "0px, 0px, 0"), this.positionClientControls(this.scale), this.alignImage();
 },
 resizeHandler: function() {
 this.inherited(arguments), this.$.image.src && this.scaleChanged();
@@ -7173,12 +8961,18 @@ var e = this.hasNode();
 if (e) {
 this.containerWidth = e.clientWidth, this.containerHeight = e.clientHeight;
 var t = this.containerWidth / this.originalWidth, n = this.containerHeight / this.originalHeight;
-this.minScale = Math.min(t, n), this.maxScale = this.minScale * 3 < 1 ? 1 : this.minScale * 3, this.scale == "auto" ? this.scale = this.minScale : this.scale == "width" ? this.scale = t : this.scale == "height" ? this.scale = n : (this.maxScale = Math.max(this.maxScale, this.scale), this.scale = this.limitScale(this.scale));
+this.minScale = Math.min(t, n), this.maxScale = this.minScale * 3 < 1 ? 1 : this.minScale * 3, this.scale == "auto" ? this.scale = this.minScale : this.scale == "width" ? this.scale = t : this.scale == "height" ? this.scale = n : this.scale == "fit" ? (this.fitAlignment = "center", this.scale = Math.max(t, n)) : (this.maxScale = Math.max(this.maxScale, this.scale), this.scale = this.limitScale(this.scale));
 }
 this.eventPt = this.calcEventLocation(), this.transformImage(this.scale);
 },
 imageError: function(e) {
 enyo.error("Error loading image: " + this.src), this.bubble("onerror", e);
+},
+alignImage: function() {
+if (this.fitAlignment && this.fitAlignment === "center") {
+var e = this.getScrollBounds();
+this.setScrollLeft(e.maxLeft / 2), this.setScrollTop(e.maxTop / 2);
+}
 },
 gestureTransform: function(e, t) {
 this.eventPt = this.calcEventLocation(t), this.transformImage(this.limitScale(this.scale * t.scale));
@@ -7319,10 +9113,25 @@ for (e = this.images.length; e < this.imageCount; e++) this.$["image" + e] && th
 this.imageCount = this.images.length;
 },
 loadNearby: function() {
-this.images.length > 0 && (this.loadImageView(this.index - 1), this.loadImageView(this.index), this.loadImageView(this.index + 1));
+var e = this.getBufferRange();
+for (var t in e) this.loadImageView(e[t]);
+},
+getBufferRange: function() {
+var e = [];
+if (this.layout.containerBounds) {
+var t = 1, n = this.layout.containerBounds, r, i, s, o, u, a;
+o = this.index - 1, u = 0, a = n.width * t;
+while (o >= 0 && u <= a) s = this.$["container" + o], u += s.width + s.marginWidth, e.unshift(o), o--;
+o = this.index, u = 0, a = n.width * (t + 1);
+while (o < this.images.length && u <= a) s = this.$["container" + o], u += s.width + s.marginWidth, e.push(o), o++;
+}
+return e;
+},
+reflow: function() {
+this.inherited(arguments), this.loadNearby();
 },
 loadImageView: function(e) {
-return this.wrap && (e = (e % this.images.length + this.images.length) % this.images.length), e >= 0 && e <= this.images.length - 1 && (this.$["image" + e] ? (this.$["image" + e].src != this.images[e] && this.$["image" + e].setSrc(this.images[e]), this.$["image" + e].setScale(this.defaultScale), this.$["image" + e].setDisableZoom(this.disableZoom)) : (this.$["container" + e].createComponent({
+return this.wrap && (e = (e % this.images.length + this.images.length) % this.images.length), e >= 0 && e <= this.images.length - 1 && (this.$["image" + e] ? this.$["image" + e].src != this.images[e] && (this.$["image" + e].setSrc(this.images[e]), this.$["image" + e].setScale(this.defaultScale), this.$["image" + e].setDisableZoom(this.disableZoom)) : (this.$["container" + e].createComponent({
 name: "image" + e,
 kind: "ImageView",
 scale: this.defaultScale,
@@ -7347,7 +9156,7 @@ transitionStart: function(e, t) {
 if (t.fromIndex == t.toIndex) return !0;
 },
 transitionFinish: function(e, t) {
-this.loadImageView(this.index - 1), this.loadImageView(this.index + 1), this.lowMemory && this.cleanupMemory();
+this.loadNearby(), this.lowMemory && this.cleanupMemory();
 },
 getActiveImage: function() {
 return this.getImageByIndex(this.index);
@@ -7356,6 +9165,7 @@ getImageByIndex: function(e) {
 return this.$["image" + e] || this.loadImageView(e);
 },
 cleanupMemory: function() {
-for (var e = 0; e < this.images.length; e++) (e < this.index - 1 || e > this.index + 1) && this.$["image" + e] && this.$["image" + e].destroy();
+var e = getBufferRange();
+for (var t = 0; t < this.images.length; t++) enyo.indexOf(t, e) === -1 && this.$["image" + t] && this.$["image" + t].destroy();
 }
 });
