@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2013 OW2 Nanoko Project
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.sonatype.oss</groupId>
+        <artifactId>oss-parent</artifactId>
+        <version>7</version>
+    </parent>
+
+    <groupId>org.nanoko.libs</groupId>
+    <artifactId>compass-gems</artifactId>
+    <version>0.12.2</version>
+
+    <packaging>jar</packaging>
+
+    <name>Compass Gems - Gem in a Jar for Compass</name>
+    <inceptionYear>2013</inceptionYear>
+
+    <description>
+        This is a repackaged GEM in a JAR format of the compass package.
+        It crates a jar with the gems as well as a zip file with the compass frameworks.
+    </description>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>http://www.opensource.org/licenses/mit-license.php</url>
+        </license>
+    </licenses>
+
+    <scm>
+        <url>https://github.com/nanoko-project/javascript-libraries</url>
+        <developerConnection>scm:git:git@github.com:nanoko-project/javascript-libraries.git</developerConnection>
+        <connection>scm:git:git@github.com:nanoko-project/javascript-libraries.git</connection>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/nanoko-project/javascript-libraries/issues</url>
+    </issueManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jruby.plugins</groupId>
+                <artifactId>jruby-rake-plugin</artifactId>
+                <version>1.7.3</version>
+                <executions>
+                    <execution>
+                        <id>install gems</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>gem</goal>
+                        </goals>
+                        <configuration>
+                            <args>install -i ${project.build.directory}/gem compass -v ${project.version} --no-rdoc
+                                --no-ri
+                            </args>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- package the gems in a jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>2.4</version>
+                <configuration>
+                    <classesDirectory>${project.build.directory}/gem</classesDirectory>
+                </configuration>
+            </plugin>
+
+            <!-- package compass frameworks in a zip file -->
+            <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>2.4</version>
+                <configuration>
+                    <descriptors>
+                        <descriptor>src/main/assembly/frameworks-assembly.xml</descriptor>
+                    </descriptors>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>package-frameworks</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

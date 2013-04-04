@@ -10,6 +10,7 @@
     <modules>
         <module>bootstrap</module>
         <module>coffeescript</module>
+        <module>compass</module>
         <module>cordova</module>
         <module>cryptoJs</module>
         <module>enyo</module>
