@@ -19,6 +19,7 @@
         <module>jQRoundabout</module>
         <module>jquery</module>
         <module>jquery.form</module>
+        <module>less</module>
         <module>marked</module>
         <module>mootools</module>
         <module>showdown</module>
