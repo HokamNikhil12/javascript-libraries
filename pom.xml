@@ -10,7 +10,10 @@
     <modules>
         <module>bootstrap</module>
         <module>coffeescript</module>
+        <!--
+            Remove compass as it requires jruby.
         <module>compass</module>
+        -->
         <module>cordova</module>
         <module>cryptoJs</module>
         <module>enyo</module>
