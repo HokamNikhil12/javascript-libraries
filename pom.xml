@@ -26,6 +26,7 @@
         <module>marked</module>
         <module>mootools</module>
         <module>showdown</module>
+        <module>ractive</module>
     </modules>
 	
     <build>
