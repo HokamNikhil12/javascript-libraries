@@ -27,6 +27,8 @@
         <module>mootools</module>
         <module>showdown</module>
         <module>ractive</module>
+        <module>ZSchema</module>
+        <module>q</module>
     </modules>
 	
     <build>
