@@ -30,15 +30,6 @@
         </snapshotRepository>
     </distributionManagement>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.nanoko.libs</groupId>
-            <artifactId>jquery</artifactId>
-            <version>1.8.3</version>
-            <type>js</type>
-        </dependency>
-    </dependencies>
-
 	<build>
 		<plugins>
             <plugin>
