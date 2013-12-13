@@ -43,21 +43,26 @@
 				  <goal>attach-artifact</goal>
 				</goals>
 				<configuration>
-					<artifacts>
-						<artifact>
-		                  <file>${project.basedir}/../..//src/main/js/aes.js</file>
-                		  <type>js</type>
-		                </artifact>
-		                <artifact>
-		                  <file>${project.basedir}/../../src/main/js/aes-min.js</file>
-                		  <type>js</type>
-        		          <classifier>min</classifier>
-		                </artifact>
-                        <artifact>
-                          <file>${project.basedir}/../../src/main/js/rollups/aes.js</file>
-                          <type>js</type>
-                          <classifier>rollups</classifier>
-                        </artifact>
+				  <artifacts>
+			    	    <artifact>
+	                  	      <file>${project.basedir}/../..//src/main/js/aes.js</file>
+        		  	      <type>js</type>
+	                  	    </artifact>
+	                	    <artifact>
+	                  	      <file>${project.basedir}/../../src/main/js/aes-min.js</file>
+        		  	      <type>js</type>
+		          	      <classifier>min</classifier>
+	                	    </artifact>
+		                    <artifact>
+		                      <file>${project.basedir}/../../src/main/js/rollups/aes.js</file>
+		                      <type>js</type>
+		                      <classifier>rollups</classifier>
+		                    </artifact>
+		                    <artifact>
+		                      <file>${project.basedir}/../../src/main/js/rollups/pbkdf2.js</file>
+		                      <type>js</type>
+		                      <classifier>rollups</classifier>
+		                    </artifact>
 		            </artifacts>    
 				</configuration>
 			  </execution>
