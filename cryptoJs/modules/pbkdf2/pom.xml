@@ -60,7 +60,7 @@
                         </artifact>
 		            </artifacts>
 				</configuration>
-			  </execution>  
+			  </execution>
 			</executions>
 		  </plugin>
 		</plugins>
