@@ -37,6 +37,7 @@
         <module>modules/evpkdf</module>
         <module>modules/hmac</module>
         <module>modules/md5</module>
+        <module>modules/pbkdf2</module>
         <module>modules/sha-1</module>
         <module>modules/sha-224</module>
         <module>modules/sha-256</module>
