@@ -8,10 +8,10 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>cryptoJS-aes</artifactId>
+    <artifactId>cryptoJS-pbkdf2</artifactId>
     <packaging>pom</packaging>
-    <name>cryptoJs-aes</name>
-    
+    <name>cryptoJs-pbkdf2</name>
+
     <distributionManagement>
     	<!-- We deploy on the 3rd party repository -->
         <repository>
@@ -43,22 +43,22 @@
 				  <goal>attach-artifact</goal>
 				</goals>
 				<configuration>
-				  <artifacts>
-                    <artifact>
-                      <file>${project.basedir}/../..//src/main/js/aes.js</file>
-                      <type>js</type>
-                    </artifact>
-                    <artifact>
-	                  <file>${project.basedir}/../../src/main/js/aes-min.js</file>
-        		  	  <type>js</type>
-		          	  <classifier>min</classifier>
-	                </artifact>
-		            <artifact>
-                      <file>${project.basedir}/../../src/main/js/rollups/aes.js</file>
-                      <type>js</type>
-                      <classifier>rollups</classifier>
-                    </artifact>
-		          </artifacts>
+					<artifacts>
+						<artifact>
+		                  <file>${project.basedir}/../..//src/main/js/pbkdf2.js</file>
+                		  <type>js</type>
+		                </artifact>
+		                <artifact>
+		                  <file>${project.basedir}/../../src/main/js/pbkdf2-min.js</file>
+                		  <type>js</type>
+        		          <classifier>min</classifier>
+		                </artifact>
+                        <artifact>
+                          <file>${project.basedir}/../../src/main/js/rollups/pbkdf2.js</file>
+                          <type>js</type>
+                          <classifier>rollups</classifier>
+                        </artifact>
+		            </artifacts>
 				</configuration>
 			  </execution>
 			</executions>
